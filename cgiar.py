@@ -1,7 +1,7 @@
 import numpy as np
 import textureShading as tex
-filename = 'Data/east_0.01.tif'
 filename = 'Data/east_0.1.tif'
+filename = 'Data/east_0.01.tif'
 
 generateData = True # if false, tries to load raw from disk
 saveRaw = True
@@ -12,9 +12,9 @@ if generateData:
     data = tex.filenameToTexture(filename)
 else:
     data = np.load('texpy.npy')
-    print "Loaded data"
+    print "Loaded saved data"
 
-if saveRaw and not generateData: # if data wasn't generated, it was loaded
+if saveRaw and generateData: # if data wasn't generated, it was loaded
     np.save('texpy.npy', data)
     print "Saved raw"
 

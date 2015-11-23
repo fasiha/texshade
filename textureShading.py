@@ -121,11 +121,13 @@ def filenameToTexture(fname, alpha = 0.5, ndvReplacement = 0.0, verbose = True):
     return x
 
 def touint16(x, cmin, cmax):
-    from scipy.interpolate import interp1d
-    interpolator = interp1d([cmin, cmax], [0, 2 ** 16 - 1 - 1e-6])
-    clamp = lambda x, lo, hi: np.minimum(np.maximum(x, lo), hi)
-    y = interpolator(clamp(x, cmin, cmax)).astype(np.uint16)
-    return y
+    # clamp x between cmin and cmax
+    x[x < cmin] = cmin
+    x[x > cmax] = cmax
+    # map [cmin, cmax] to [0, 2**16-1-1e-6] linearly
+    maxval = 2 ** 16 - 1 - 1e-6
+    slope = (maxval - 0) / (cmax - cmin)
+    return (slope * x - slope * cmin).astype(np.uint16)
 
 def dataToPercentileLimits(texture, percentiles, postPercentileScale):
     colorlimits = np.percentile(texture.ravel(), percentiles)
