@@ -13,7 +13,7 @@ def touint16(x, cmin, cmax):
 
 texture = np.load('texpy.npy')
 if True:
-    filename = '/Users/fasih/Dropbox/Data/cgiar/0.01_small_East.tif'
+    filename = 'Data/east_0.1.tif'
     fileHandle = gdal.Open(filename, gdalconst.GA_ReadOnly)
     band = fileHandle.GetRasterBand(1)
     orig = band.ReadAsArray()

@@ -1,0 +1,7 @@
+*.pyc
+data/
+output/
+*.png
+*.tiff
+*/.DS_Store
+

@@ -36,7 +36,7 @@ def CreateGeoTiff(Name, Array, driver, NDV,
     return NewFileName
 
 # Open the original file
-FileName = '/Users/fasih/Dropbox/Data/cgiar/0.01_small_East.tif'
+FileName = 'Data/east_0.1.tif'
 DataSet = gdal.Open(FileName, GA_ReadOnly)
 # Get the first (and only) band.
 Band = DataSet.GetRasterBand(1)
@@ -54,13 +54,15 @@ if NDV is not None:
 NDV, xsize, ysize, GeoT, Projection, DataType = GetGeoInfo(FileName)
 
 # Import new data
-tex = gdal.Open('/Users/fasih/Dropbox/MobileOrg/textureShading-Asia/sichuan/east-0.01-land-only.png')
+tex = gdal.Open('pytex16.png')
 texArray = tex.ReadAsArray()
 #NewArray = ((texArray.copy().astype(np.float) - 2**15*0) / 2**8).astype(np.uint8)
 #DataType = GDT_Byte
 NewArray = ((texArray.copy().astype(np.float) - 2**15*0) /
         2**0).astype(np.uint16)
 DataType = GDT_UInt16
+# DataType = GDT_Float32 # Preview nor Gimp can open this :(
+# DataType = GDT_UInt32 # Ditto?
 
 print NewArray.min(), NewArray.max()
 
