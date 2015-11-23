@@ -4,4 +4,6 @@ output/
 *.png
 *.tiff
 */.DS_Store
+.DS_Store
+*.npy
 
