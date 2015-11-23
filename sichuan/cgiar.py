@@ -16,8 +16,9 @@ def sciMoreReal(x, alpha):
     rfft2 = lambda x: scifft.rfft(scifft.rfft(x, Nyx[1], 1, True), Nyx[0], 0, True)
     irfft2 = lambda X: scifft.irfft(scifft.irfft(X, axis=0, overwrite_x=True), overwrite_x=True)
 
-    xr = rfft2(x)
-    xr = irfft2(xr * H2)
+    xr = rfft2(x) * H2
+    H2 = [] # potentially trigger GC here to reclaim H2's memory
+    xr = irfft2(xr)
 
     return xr[:x.shape[0], :x.shape[1]]
 
