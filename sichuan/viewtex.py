@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.signal import decimate
+import gdal, gdalconst
 
 
 def touint16(x, cmin, cmax):
@@ -11,6 +12,13 @@ def touint16(x, cmin, cmax):
 
 
 texture = np.load('texpy.npy')
+if True:
+    filename = '/Users/fasih/Dropbox/Data/cgiar/0.01_small_East.tif'
+    fileHandle = gdal.Open(filename, gdalconst.GA_ReadOnly)
+    band = fileHandle.GetRasterBand(1)
+    orig = band.ReadAsArray()
+    texture[orig < 0] = 0
+    orig = [] # clear
 
 colorlimits = np.percentile(texture.ravel(), [1.0 / 2, 99.9])
 newlimits = colorlimits * [.55, .4]
