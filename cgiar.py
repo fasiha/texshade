@@ -25,7 +25,7 @@ def sciMoreReal(x, alpha):
 
 
 # filename = '/Users/fasih/Dropbox/Data/cgiar/SRTM_NE_250m.tif'
-filename = '/Users/fasih/Dropbox/Data/cgiar/0.01_small_East.tif'
+filename = './Data/cgiar/0.01_small_East.tif'
 # filename = '/Users/fasih/Dropbox/Data/chgis/chgis_dem.tif'
 fileHandle = gdal.Open(filename, gdalconst.GA_ReadOnly)
 band = fileHandle.GetRasterBand(1)
