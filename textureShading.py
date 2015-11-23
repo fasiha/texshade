@@ -75,9 +75,6 @@ def latLonRectToArea(lats, lons, radius = 6371.0):
     lats = np.array(lats) * np.pi / 180.0
     return np.pi / 180.0 * radius ** 2 * np.abs(np.diff(np.sin(lats)) * np.diff(lons))
 
-def landOnly(x, cutoff = 0.0):
-    return np.maximum(cutoff, x)
-
 def filenameToLatsLons(fname):
     fileHandle = gdal.Open(fname, gdalconst.GA_ReadOnly)
 
@@ -93,26 +90,34 @@ def scaleByPixelArea(x, lats, lons):
     areas = latLonRectToArea(lats, lons)
     return x / (areas[:, np.newaxis] / areas.max())
 
-def filenameToLandMask(fname, cutoff = 0, bandId = 1):
+def filenameToNoDataMask(fname, bandId = 1):
     fileHandle = gdal.Open(fname, gdalconst.GA_ReadOnly)
     band = fileHandle.GetRasterBand(bandId)
-    return band.ReadAsArray() < cutoff
+    return band.ReadAsArray() == band.GetNoDataValue()
+
+def filenameToNoDataValue(fname, bandId = 1):
+    fileHandle = gdal.Open(fname, gdalconst.GA_ReadOnly)
+    band = fileHandle.GetRasterBand(bandId)
+    return band.GetNoDataValue()
 
 def filenameToData(fname, dtype = np.float32, bandId = 1):
     fileHandle = gdal.Open(fname, gdalconst.GA_ReadOnly)
     band = fileHandle.GetRasterBand(bandId)
     return band.ReadAsArray().astype(dtype)
 
-def filenameToTexture(fname, alpha = 0.5, clipNegative = True, verbose = True):
+def filenameToTexture(fname, alpha = 0.5, ndvReplacement = 0.0, verbose = True):
+    ndv = filenameToNoDataValue(fname) # no data value
     latsLons = filenameToLatsLons(fname)
     x = filenameToData(fname)
     if verbose: print "Loaded data"
-    if clipNegative:
-        x = landOnly(x)
+
+    x[x==ndv] = ndvReplacement
     x = scaleByPixelArea(x, latsLons['lats'], latsLons['lons'])
     if verbose: print "Done preprocessing"
+    
     x = sciMoreReal(x, alpha)
     if verbose: print "Computed texture"
+    
     return x
 
 def touint16(x, cmin, cmax):
