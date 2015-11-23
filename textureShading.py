@@ -158,7 +158,7 @@ def CreateGeoTiff(Name, Array, driver, NDV,
     # Set nans to the original No Data Value
     if NDV is not None: Array[np.isnan(Array)] = NDV
     # Set up the dataset
-    DataSet = driver.Create( NewFileName, xsize, ysize, 1, DataType )
+    DataSet = driver.Create( NewFileName, xsize, ysize, 1, DataType, options = [ 'COMPRESS=LZW' ] )
             # the '1' is for band 1.
     DataSet.SetGeoTransform(GeoT)
     DataSet.SetProjection( Projection.ExportToWkt() )

@@ -25,12 +25,12 @@ percentiles = [0.5, 99.9]
 postPercentileScale = [1, 1.0]
 postPercentileScale = [0.25, 0.2]
 postPercentileScale = [0.55, 0.4]
+
 if writeTif:
     tex.dataToGTiff16(data, filename, 'modularized.tif', percentiles, postPercentileScale)
     print "Saved TIF"
 
 if writePng:
     tex.dataToPng16(data, 'modularized.png', percentiles, postPercentileScale) 
-    # also try [0.25, 0.2] for postPercentileScale. Or [0.55, 0.4]. Or [1, 1].
     print "Saved PNG"
 
