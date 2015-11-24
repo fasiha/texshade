@@ -88,7 +88,7 @@ def filenameToLatsLons(fname):
 
 def scaleByPixelArea(x, lats, lons):
     areas = latLonRectToArea(lats, lons)
-    return x / (areas[:, np.newaxis] / areas.max())
+    return x / (areas[:, np.newaxis] / areas.max()).astype(x.dtype)
 
 def filenameToNoDataMask(fname, bandId = 1):
     fileHandle = gdal.Open(fname, gdalconst.GA_ReadOnly)
