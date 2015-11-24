@@ -21,13 +21,19 @@ if saveRaw and generateData: # if data wasn't generated, it was loaded
 # Re-apply mask
 data[tex.filenameToNoDataMask(filename)] = 0
 
+# Some presets for making pretty pictures right off the bat
 percentiles = [0.5, 99.9]
 postPercentileScale = [1, 1.0]
 postPercentileScale = [0.25, 0.2]
 postPercentileScale = [0.55, 0.4]
 
+# A preset for images whose curves we'll later manipulate: so save a lot of data
+percentiles = [0.1, 99.9]
+postPercentileScale = [1, 1]
+
 if writeTif:
-    tex.dataToGTiff16(data, filename, 'modularized.tif', percentiles, postPercentileScale)
+    tex.dataToGTiff(data, filename, 'modularized.tif', 16, percentiles,
+            postPercentileScale)
     print "Saved TIF"
 
 if writePng:

@@ -120,14 +120,14 @@ def filenameToTexture(fname, alpha = 0.5, ndvReplacement = 0.0, verbose = True):
     
     return x
 
-def touint16(x, cmin, cmax):
+def touint(x, cmin, cmax, dtype = np.uint16):
     # clamp x between cmin and cmax
     x[x < cmin] = cmin
     x[x > cmax] = cmax
-    # map [cmin, cmax] to [0, 2**16-1-1e-6] linearly
-    maxval = 2 ** 16 - 1 - 1e-6
+    # map [cmin, cmax] to [0, 2**depth-1-1e-6] linearly
+    maxval = 2 ** (8 * dtype().itemsize) - 1 - 1e-6
     slope = (maxval - 0) / (cmax - cmin)
-    return (slope * x - slope * cmin).astype(np.uint16)
+    return (slope * x - slope * cmin).astype(dtype)
 
 def dataToPercentileLimits(texture, percentiles, postPercentileScale):
     colorlimits = np.percentile(texture.ravel(), percentiles)
@@ -137,7 +137,7 @@ def dataToPng16(data, fname = 'pytex16.png', percentiles = [0.5, 99.9],
         postPercentileScale = [1.0, 1.0]):
     import png
     limits = dataToPercentileLimits(data, percentiles, postPercentileScale)
-    png.from_array(touint16(data, *limits), 'L').save(fname)
+    png.from_array(touint(data, *limits, depth = 16), 'L').save(fname)
 
 # Adapted from EddyTheB, http://gis.stackexchange.com/a/57006/8623
 def GetGeoInfo(FileName):
@@ -153,30 +153,33 @@ def GetGeoInfo(FileName):
     return NDV, xsize, ysize, GeoT, Projection, DataType
 
 def CreateGeoTiff(Name, Array, driver, NDV, 
-                  xsize, ysize, GeoT, Projection, DataType):
-    if DataType == 'Float32':
-        DataType = gdal.GDT_Float32
-    NewFileName = Name+'.tif'
-    # Set nans to the original No Data Value
-    if NDV is not None: Array[np.isnan(Array)] = NDV
+                  xsize, ysize, GeoT, Projection, DataType, bandId = 1):
     # Set up the dataset
-    DataSet = driver.Create( NewFileName, xsize, ysize, 1, DataType, options = [ 'COMPRESS=LZW' ] )
-            # the '1' is for band 1.
+    DataSet = driver.Create( Name, xsize, ysize, bandId, DataType, options = [ 'COMPRESS=LZW' ] )
     DataSet.SetGeoTransform(GeoT)
     DataSet.SetProjection( Projection.ExportToWkt() )
     # Write the array
-    DataSet.GetRasterBand(1).WriteArray( Array )
-    if NDV is not None: DataSet.GetRasterBand(1).SetNoDataValue(NDV)
-    return NewFileName
+    DataSet.GetRasterBand(bandId).WriteArray( Array )
+    if NDV is not None: DataSet.GetRasterBand(bandId).SetNoDataValue(NDV)
+    return Name
 
-def dataToGTiff16(data, infile, outfile = 'pytex16.tiff', percentiles = [0.5, 99.9],
-        postPercentileScale = [1.0, 1.0]):
+def dataToGTiff(data, infile, outfile = 'pytex.tiff', depth = 16, percentiles
+        = [0.5, 99.9], postPercentileScale = [1.0, 1.0]):
+    if depth == 16:
+        gdalDataType = gdalconst.GDT_UInt16
+        npDataType = np.uint16
+    elif depth == 32:
+        gdalDataType = gdalconst.GDT_UInt32
+        npDataType = np.uint32
+    else:
+        raise ValueError('Only 16- or 32-bit GTiffs allowed')
+
     driver = gdal.GetDriverByName('GTiff')
     NDV, xsize, ysize, GeoT, Projection, DataType = GetGeoInfo(infile)
 
     limits = dataToPercentileLimits(data, percentiles, postPercentileScale)
-    data = touint16(data, *limits)
+    data = touint(data, *limits, dtype = npDataType)
     
     CreateGeoTiff(outfile, data, driver, NDV, xsize, ysize, GeoT, Projection,
-            gdalconst.GDT_UInt16)
+            gdalDataType)
 
