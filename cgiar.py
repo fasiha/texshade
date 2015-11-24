@@ -32,7 +32,7 @@ percentiles = [0.1, 99.9]
 postPercentileScale = [1, 1]
 
 if writeTif:
-    tex.dataToGTiff(data, filename, 'modularized.tif', 16, percentiles,
+    tex.dataToGTiff(data, filename, 'modularized.tif', 16/2, percentiles,
             postPercentileScale)
     print "Saved TIF"
 
@@ -40,3 +40,6 @@ if writePng:
     tex.dataToPng16(data, 'modularized.png', percentiles, postPercentileScale) 
     print "Saved PNG"
 
+# NE2 blending
+ne2file = 'ne2-0.1-east.tif'
+# ne = tex.filenameToData(ne2file, None)

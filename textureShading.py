@@ -20,7 +20,7 @@ def sciMoreReal(x, alpha, verbose = True):
 
     xr = rfft2(x) * H2
     if verbose: print "Completed frequency domain operations"
-    H2 = [] # potentially trigger GC here to reclaim H2's memory
+    H2 = None # potentially trigger GC here to reclaim H2's memory
     xr = irfft2(xr)
     if verbose: print "Back to spatial-domain"
 
@@ -100,10 +100,14 @@ def filenameToNoDataValue(fname, bandId = 1):
     band = fileHandle.GetRasterBand(bandId)
     return band.GetNoDataValue()
 
-def filenameToData(fname, dtype = np.float32, bandId = 1):
+def filenameToData(fname, dtype = np.float32):
+    """Reads all bands"""
     fileHandle = gdal.Open(fname, gdalconst.GA_ReadOnly)
-    band = fileHandle.GetRasterBand(bandId)
-    return band.ReadAsArray().astype(dtype)
+    result = np.squeeze(np.dstack([fileHandle.GetRasterBand(n+1).ReadAsArray() for
+        n in range(fileHandle.RasterCount)]))
+    if dtype is not None:
+        return result.astype(dtype)
+    return result
 
 def filenameToTexture(fname, alpha = 0.5, ndvReplacement = 0.0, verbose = True):
     ndv = filenameToNoDataValue(fname) # no data value
@@ -127,7 +131,8 @@ def touint(x, cmin, cmax, dtype = np.uint16):
     # map [cmin, cmax] to [1, 2**depth-1-1e-6] linearly
     maxval = 2 ** (8 * dtype().itemsize) - 1 - 1e-6
     slope = (maxval - 1.0) / (cmax - cmin)
-    return (slope * x - slope * cmin + 1).astype(dtype)
+    ret = slope * (x - cmin) + 1
+    return (ret).astype(dtype)
 
 def dataToPercentileLimits(texture, percentiles, postPercentileScale):
     colorlimits = np.percentile(texture.ravel(), percentiles)
@@ -171,8 +176,11 @@ def dataToGTiff(data, infile, outfile = 'pytex.tiff', depth = 16, percentiles
     elif depth == 32:
         gdalDataType = gdalconst.GDT_UInt32
         npDataType = np.uint32
+    elif depth == 8:
+        gdalDataType = gdalconst.GDT_Byte
+        npDataType = np.uint8
     else:
-        raise ValueError('Only 16- or 32-bit GTiffs allowed')
+        raise ValueError('Only 8-, 16-, or 32-bit GTiffs allowed')
 
     driver = gdal.GetDriverByName('GTiff')
     NDV, xsize, ysize, GeoT, Projection, DataType = GetGeoInfo(infile)
@@ -182,6 +190,7 @@ def dataToGTiff(data, infile, outfile = 'pytex.tiff', depth = 16, percentiles
     limits = dataToPercentileLimits(data[np.logical_not(ndvMask)], percentiles,
             postPercentileScale)
     data = touint(data, *limits, dtype = npDataType)
+    print "Chose limits", limits, "minmax of result", [np.min(data), np.max(data)]
 
     newNDV = 0.0
     data[ndvMask] = newNDV

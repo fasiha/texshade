@@ -29,3 +29,8 @@ Data/ne_10m_land/ne_10m_land.shp:
 #Data/SRTM_NE_250m.tif: Data/SRTM_NE_250m_TIF.rar
 #	unrar x -o- Data/SRTM_NE_250m_TIF.rar Data/
 #
+
+Data/ne2-0.1.tif: Data/NE2_HR_LC/NE2_HR_LC.tif
+	gdalwarp -tr 0.1 0.1 -r average Data/NE2_HR_LC/NE2_HR_LC.tif Data/ne2-0.1.tif
+	gdaltindex shp-0.1.shp Data/east_0.1.tif
+	gdalwarp -dstnodata 0 -q -cutline shp-0.1.shp -crop_to_cutline -of GTiff Data/ne2-0.1.tif ne2-0.1-east.tif
