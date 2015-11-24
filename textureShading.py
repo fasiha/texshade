@@ -124,10 +124,10 @@ def touint(x, cmin, cmax, dtype = np.uint16):
     # clamp x between cmin and cmax
     x[x < cmin] = cmin
     x[x > cmax] = cmax
-    # map [cmin, cmax] to [0, 2**depth-1-1e-6] linearly
+    # map [cmin, cmax] to [1, 2**depth-1-1e-6] linearly
     maxval = 2 ** (8 * dtype().itemsize) - 1 - 1e-6
-    slope = (maxval - 0) / (cmax - cmin)
-    return (slope * x - slope * cmin).astype(dtype)
+    slope = (maxval - 1.0) / (cmax - cmin)
+    return (slope * x - slope * cmin + 1).astype(dtype)
 
 def dataToPercentileLimits(texture, percentiles, postPercentileScale):
     colorlimits = np.percentile(texture.ravel(), percentiles)
@@ -177,9 +177,15 @@ def dataToGTiff(data, infile, outfile = 'pytex.tiff', depth = 16, percentiles
     driver = gdal.GetDriverByName('GTiff')
     NDV, xsize, ysize, GeoT, Projection, DataType = GetGeoInfo(infile)
 
-    limits = dataToPercentileLimits(data, percentiles, postPercentileScale)
+    # Re-generate the NDV mask, and calculate percentiles of non-masked values
+    ndvMask = filenameToNoDataMask(infile)
+    limits = dataToPercentileLimits(data[np.logical_not(ndvMask)], percentiles,
+            postPercentileScale)
     data = touint(data, *limits, dtype = npDataType)
+
+    newNDV = 0.0
+    data[ndvMask] = newNDV
     
-    CreateGeoTiff(outfile, data, driver, NDV, xsize, ysize, GeoT, Projection,
+    CreateGeoTiff(outfile, data, driver, newNDV, xsize, ysize, GeoT, Projection,
             gdalDataType)
 
