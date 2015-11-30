@@ -169,7 +169,8 @@ def CreateGeoTiff(Name, Array, driver, NDV,
     return Name
 
 def dataToGTiff(data, infile, outfile = 'pytex.tiff', depth = 16, percentiles
-        = [0.5, 99.9], postPercentileScale = [1.0, 1.0]):
+        = [0.5, 99.9], postPercentileScale = [1.0, 1.0], sample=1.0,
+        remask=True):
     if depth == 16:
         gdalDataType = gdalconst.GDT_UInt16
         npDataType = np.uint16
@@ -181,17 +182,28 @@ def dataToGTiff(data, infile, outfile = 'pytex.tiff', depth = 16, percentiles
         npDataType = np.uint8
     else:
         raise ValueError('Only 8-, 16-, or 32-bit GTiffs allowed')
+    sample = max(min(sample, 1.0), 1e-6)
+    skip = int(1.0 / sample)
+    if data.size <= skip:
+        raise ValueError('Sample rate too low, less than two samples will be checked')
 
     driver = gdal.GetDriverByName('GTiff')
     NDV, xsize, ysize, GeoT, Projection, DataType = GetGeoInfo(infile)
 
-    # Re-generate the NDV mask, and calculate percentiles of non-masked values
-    ndvMask = filenameToNoDataMask(infile)
-    limits = dataToPercentileLimits(data[np.logical_not(ndvMask)], percentiles,
-            postPercentileScale)
-    data = touint(data, *limits, dtype = npDataType)
-    print "Chose limits", limits, "minmax of result", [np.min(data), np.max(data)]
+    # Calculate percentiles of non-masked values
+    if remask:
+        ndvMask = filenameToNoDataMask(infile)
+        limits = dataToPercentileLimits(data[np.logical_not(ndvMask)][::skip],
+                percentiles, postPercentileScale)
+    else:
+        limits = dataToPercentileLimits(data[::skip, ::skip], percentiles,
+                postPercentileScale)
 
+    # Remap to output format
+    data = touint(data, *limits, dtype = npDataType)
+    # print "Chose limits", limits, "minmax of result", [np.min(data), np.max(data)]
+
+    # Reinstate mask
     newNDV = 0.0
     data[ndvMask] = newNDV
     
