@@ -3,6 +3,10 @@ Data/ne-land-single.bin: Data/SRTM_NE_250m.tif Data/ne_10m_land/ne_10m_land.shp
 	gdal_translate -of ENVI -ot Float32 Data/ne-land.tif Data/ne-land-single.bin
 	rm Data/ne-land.tif
 
+Data/koeppen-0.1.tif Data/koeppen-0.01.tif: Data/Koeppen-Geiger-GIS/koeppen-geiger.shp
+	gdal_rasterize -co COMPRESS=LZW -a "GRIDCODE"  -a_nodata 0 -tr 0.0100000000000000 0.0100000000000000 -ot Byte -te -30.0104168 -60.0095835 180.0095832 60.0104165 Data/Koeppen-Geiger-GIS/koeppen-geiger.shp Data/koeppen-0.01.tif
+	gdal_rasterize -co COMPRESS=LZW -a "GRIDCODE"  -a_nodata 0 -tr 0.100000000000000 0.100000000000000 -ot Byte -te -30.0104168 -59.9895835 179.9895832 60.0104165  Data/Koeppen-Geiger-GIS/koeppen-geiger.shp Data/koeppen-0.1.tif
+
 Data/east_0.01.tif: Data/SRTM_SE_250m.tif Data/SRTM_NE_250m.tif Data/ne_10m_land/ne_10m_land.shp
 	gdalwarp -tr 0.01 0.01 -r average Data/SRTM_SE_250m.tif Data/se_0.01.tif
 	gdalwarp -tr 0.01 0.01 -r average Data/SRTM_NE_250m.tif Data/ne_0.01.tif

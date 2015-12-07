@@ -168,8 +168,8 @@ def CreateGeoTiff(Name, Array, driver, NDV,
     if NDV is not None: DataSet.GetRasterBand(bandId).SetNoDataValue(NDV)
     return Name
 
-def dataToGTiff(data, infile, outfile = 'pytex.tiff', depth = 16, percentiles
-        = [0.5, 99.9], postPercentileScale = [1.0, 1.0], sample=1.0,
+def dataToGTiff(data, infile, outfile='pytex.tiff', depth=16, 
+        percentiles=[0.5, 99.9], postPercentileScale=[1.0, 1.0], sample=1.0,
         remask=True):
     if depth == 16:
         gdalDataType = gdalconst.GDT_UInt16
