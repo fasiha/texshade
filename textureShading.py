@@ -158,14 +158,19 @@ def GetGeoInfo(FileName):
     return NDV, xsize, ysize, GeoT, Projection, DataType
 
 def CreateGeoTiff(Name, Array, driver, NDV, 
-                  xsize, ysize, GeoT, Projection, DataType, bandId = 1):
+                  xsize, ysize, GeoT, Projection, DataType, numBands=1):
     # Set up the dataset
-    DataSet = driver.Create( Name, xsize, ysize, bandId, DataType, options = [ 'COMPRESS=LZW' ] )
+    DataSet = driver.Create( Name, xsize, ysize, numBands, DataType, options = [ 'COMPRESS=LZW' ] )
     DataSet.SetGeoTransform(GeoT)
     DataSet.SetProjection( Projection.ExportToWkt() )
     # Write the array
-    DataSet.GetRasterBand(bandId).WriteArray( Array )
-    if NDV is not None: DataSet.GetRasterBand(bandId).SetNoDataValue(NDV)
+    if numBands == 1:
+        DataSet.GetRasterBand(numBands).WriteArray( Array )
+        if NDV is not None: DataSet.GetRasterBand(numBands).SetNoDataValue(NDV)
+    else:
+        for bid in range(numBands):
+            DataSet.GetRasterBand(bid + 1).WriteArray( Array[:,:,bid] )
+            if NDV is not None: DataSet.GetRasterBand(bid + 1).SetNoDataValue(NDV)
     return Name
 
 def dataToGTiff(data, infile, outfile='pytex.tiff', depth=16, 

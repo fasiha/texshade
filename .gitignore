@@ -6,4 +6,10 @@ output/
 */.DS_Store
 .DS_Store
 *.npy
+*aux.xml
+*tif
+*.shp
+*.prj
+*.dbf
+*.shx
 

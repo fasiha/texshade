@@ -1,10 +1,10 @@
 import numpy as np
 import textureShading as tex
-filename = 'Data/east_0.1.tif'
-koeppenRasterFile = 'Data/koeppen-0.1.tif'
 
-filename = 'Data/east_0.01.tif'
-koeppenRasterFile = 'Data/koeppen-0.01.tif'
+mksmall = lambda : ('Data/east_0.1.tif', 'Data/koeppen-0.1.tif')
+mkmed = lambda : ('Data/east_0.01.tif', 'Data/koeppen-0.01.tif')
+
+filename, koeppenRasterFile = mksmall()
 
 generateData = not True # if false, tries to load raw from disk
 saveRaw = True
@@ -57,7 +57,8 @@ if 1:
     # zones
     import csv
     import matplotlib.colors as mplcolors
-    with open('Data/koeppen-colors.csv', 'r') as csvfile:
+    koeppenCsvFile = 'Data/koeppen-colors-low-contrast.csv'
+    with open(koeppenCsvFile, 'r') as csvfile:
         reader = csv.reader(csvfile)
         colors = [np.array(map(mplcolors.hex2color, r)) for r in reader]
     legend = "A,D,E,C,B".split(',')
@@ -90,7 +91,7 @@ if 1:
     koeppenD = intervalInclusive(koeppenRaster, 41, 52)
     koeppenE = intervalInclusive(koeppenRaster, 61, 62)
     
-    dataClim = np.zeros([data.shape[0], data.shape[1], 3], dtype=np.uint8)
+    dataClim = np.dstack([tex8bit, tex8bit, tex8bit])
     # output of intZoneToColor is a float between [0, 1]. To output this as a
     # byte, scale it by this (256 - epsilon), so [0, 1] -> [0, 255] inside the
     # byte-array. We do 256 - epsilon so that 1 gets scaled to nearly 256, which
@@ -106,5 +107,12 @@ if 1:
     dataClim[koeppenE, :] = intZoneToColor(tex8bit[koeppenE], 'E') * oneTo255
     
     dataClim[np.logical_not(dataMask), :] = 0
-    import png
-    png.from_array(dataClim, 'RGB').save('col.png')
+
+    # Write GeoTIFF
+    import gdal, gdalconst
+    driver = gdal.GetDriverByName('GTiff')
+    NDV, xsize, ysize, GeoT, Projection, DataType = tex.GetGeoInfo(filename)
+    newNDV = 0
+    tex.CreateGeoTiff('col.tif', dataClim, driver, newNDV, xsize, ysize, 
+            GeoT, Projection, gdalconst.GDT_Byte, numBands=3)
+

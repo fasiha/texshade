@@ -7,6 +7,19 @@ Data/koeppen-0.1.tif Data/koeppen-0.01.tif: Data/Koeppen-Geiger-GIS/koeppen-geig
 	gdal_rasterize -co COMPRESS=LZW -a "GRIDCODE"  -a_nodata 0 -tr 0.0100000000000000 0.0100000000000000 -ot Byte -te -30.0104168 -60.0095835 180.0095832 60.0104165 Data/Koeppen-Geiger-GIS/koeppen-geiger.shp Data/koeppen-0.01.tif
 	gdal_rasterize -co COMPRESS=LZW -a "GRIDCODE"  -a_nodata 0 -tr 0.100000000000000 0.100000000000000 -ot Byte -te -30.0104168 -59.9895835 179.9895832 60.0104165  Data/Koeppen-Geiger-GIS/koeppen-geiger.shp Data/koeppen-0.1.tif
 
+Data/east-land.tif Data/west-land.tif: Data/SRTM_SE_250m.tif Data/SRTM_NE_250m.tif Data/ne_10m_land/ne_10m_land.shp Data/SRTM_W_250m.tif
+	# not working, make dies at 70%: # gdal_merge.py -n -32768 -a_nodata -32768 -co COMPRESS=LZW -o Data/all.tif Data/SRTM_SE_250m.tif Data/SRTM_NE_250m.tif	Data/SRTM_W_250m.tif
+	# Crop to land: don't bother with compression
+	gdalwarp -cutline Data/ne_10m_land/ne_10m_land.shp -dstnodata -32768 Data/SRTM_SE_250m.tif Data/se-land.tif
+	gdalwarp -cutline Data/ne_10m_land/ne_10m_land.shp -dstnodata -32768 Data/SRTM_NE_250m.tif Data/ne-land.tif
+	gdalwarp -cutline Data/ne_10m_land/ne_10m_land.shp -dstnodata -32768 Data/SRTM_W_250m.tif Data/w-land.tif
+	# Merge NE and SE into one so they can be processed together.
+	gdal_merge.py -n -32768 -a_nodata -32768 -o Data/east-land.tif Data/ne-land.tif Data/se-land.tif
+	# delete NE and SE lands
+	rm -f Data/ne-land.tif
+	rm -f Data/se-land.tif
+
+
 Data/east_0.01.tif: Data/SRTM_SE_250m.tif Data/SRTM_NE_250m.tif Data/ne_10m_land/ne_10m_land.shp
 	gdalwarp -tr 0.01 0.01 -r average Data/SRTM_SE_250m.tif Data/se_0.01.tif
 	gdalwarp -tr 0.01 0.01 -r average Data/SRTM_NE_250m.tif Data/ne_0.01.tif
