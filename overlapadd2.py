@@ -86,22 +86,21 @@ def overlapadd2(Amat, Hmat, L=None, Nfft=None, y=None, verbose=False):
 
     Hf = fft2(Hmat, Nfft)
 
+    realOnly = np.isrealobj(Amat) and np.isrealobj(Hmat)
     (XDIM, YDIM) = (1, 0)
-    adjust = lambda x: x                           # no adjuster
-    if np.isrealobj(Amat) and np.isrealobj(Hmat):  # unless inputs are real
-        adjust = np.real                           # then ensure real
     start = [0, 0]
     endd = [0, 0]
     while start[XDIM] <= Na[XDIM]:
         endd[XDIM] = min(start[XDIM] + L[XDIM], Na[XDIM])
         start[YDIM] = 0
         while start[YDIM] <= Na[YDIM]:
-            if verbose:
-                print("Starting", start, "FFT size", Nfft)
-
             endd[YDIM] = min(start[YDIM] + L[YDIM], Na[YDIM])
-            yt = adjust(ifft2(Hf * fft2(Amat[start[YDIM] : endd[YDIM],
-                        start[XDIM] : endd[XDIM]], Nfft)))
+            if verbose:
+                print("Input start", start, "Input end", endd, "FFT size", Nfft)
+            yt = ifft2(Hf * fft2(Amat[start[YDIM] : endd[YDIM], 
+                                      start[XDIM] : endd[XDIM]], Nfft))
+            if realOnly:
+                yt = yt.real
 
             thisend = np.minimum(Na + M - 1, start + Nfft)
             y[start[YDIM] : thisend[YDIM], start[XDIM] : thisend[XDIM]] += (

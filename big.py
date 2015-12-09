@@ -8,7 +8,9 @@ interpHyper = InterpolatedUnivariateSpline(radii, hyper, ext='raise')
 
 import halfbandfilter as hb
 from scipy.signal import convolve2d
+
 import gdal, gdalconst
+import textureShading as tex
 
 def vec(v):
     return v.reshape(v.size, -1)
@@ -37,20 +39,19 @@ def makeHalfHankel(N, hbTaps=64):
     
     return finalFilter
 
-def memmapInput(origfilename, binfilename, memmapMode='c'):
+def memmapInput(origfilename, binfilename, memmapMode='r'):
     fileHandle = gdal.Open(origfilename, gdalconst.GA_ReadOnly)
     width, height = (fileHandle.RasterXSize, fileHandle.RasterYSize)
 
-    inmap = np.memmap(binfilename, dtype=np.float32, mode=memmapMode,
+    inmap = np.memmap(binfilename, dtype=np.int16, mode=memmapMode,
             shape=(height, width))
     return inmap
     
 def memmapOutput(fname, shape):
     return np.memmap(fname, dtype=np.float32, mode='w+', shape=tuple(shape))
 
-def run(origfilename, binfilename, hankelTaps=960, L=(3500, 3500), verbose=True):
-    elevation = memmapInput(origfilename, binfilename)
-    elevation[elevation < 0] = 0.0
+def run(elevTifName, elevBinName, hankelTaps=960, L=(3500, 3500), verbose=True):
+    elevation = memmapInput(elevTifName, elevBinName)
 
     hankelFilter = makeHalfHankel(hankelTaps)
     if verbose:
@@ -58,10 +59,71 @@ def run(origfilename, binfilename, hankelTaps=960, L=(3500, 3500), verbose=True)
     outSize = np.array(elevation.shape) + hankelFilter.shape - 1
 
     texture = memmapOutput('tex.bin', outSize)
-
     texture = ola.overlapadd2(elevation, hankelFilter, y=texture, L=L, verbose=True)
+    if verbose:
+        print("Done with filtering")
 
-    return texture
+    origSize = elevation.shape
+    filterSize = hankelFilter.shape
+    subtexture = memmapOutput('subtex.bin', elevation.shape)
+    subtexture[:] = texture[filterSize[0]/2 : filterSize[0]/2+origSize[0], 
+                            filterSize[1]/2 : filterSize[1]/2+origSize[1] ][:]
+    subtexture.flush()
+    if verbose:
+        print("Done with extracting sub-texture")
+
+    return subtexture
+
+def estimateLimits(subtexture, ndvMask, percentiles, postPercentileScale, 
+                   skip=10, nbins=1000):
+    hist, binEdges = np.histogram(subtexture[np.logical_not(ndvMask)][::skip],
+            bins=nbins, density=True)
+    distribution = np.cumsum(hist) * np.diff(binEdges[:2])
+    
+    loIdx = np.sum(distribution < percentiles[0] / 100.0)
+    hiIdx = np.sum(distribution < percentiles[1] / 100.0)
+    
+    if loIdx == 0 or hiIdx == nbins:
+        print("Histogram with {} bins insufficient to estimate percentiles".format(nbins))
+
+    rawLimits = np.array([binEdges[loIdx], binEdges[hiIdx]])
+    limits = rawLimits * postPercentileScale
+    return tuple(limits)
+
+def postProcess(subtexture, elevTifName, percentiles=[0.1, 99.9], 
+                postPercentileScale=[1.0, 1.0], verbose=True):
+    # Find no-data mask from original file, which should be the water portions
+    # of the world according to Natural Earth vector data
+    ndvMask = tex.filenameToNoDataMask(elevTifName)
+    if verbose:
+        print("Generated no-data mask")
+    
+    # Get a soft-estimate of the color limits within `percentiles` percentiles
+    limits = estimateLimits(subtexture, ndvMask, percentiles,
+            postPercentileScale)
+    if verbose:
+        print("Estimated fuzzy limits")
+
+    # Within those limits, rescale to 1-255 (leaving 0 as a new no-data value)
+    intTex = tex.touint(subtexture, *limits, dtype=np.uint8)
+    if verbose:
+        print("Converted to byte image")
+
+    # In the byte image, reinstate the no-data mask with 0
+    newNDV = 0
+    intTex[ndvMask] = newNDV
+    if verbose:
+        print("Reinstated mask")
+
+    # Save!
+    driver = gdal.GetDriverByName('GTiff')
+    NDV, xsize, ysize, GeoT, Projection, DataType = tex.GetGeoInfo(elevTifName)
+
+    tex.CreateGeoTiff('subtex.tif', intTex, driver, newNDV, xsize, ysize, 
+            GeoT, Projection, gdalconst.GDT_Byte)
+    if verbose:
+        print("Done saving.")
+
 
 def disp(tex):
     import pylab
@@ -73,12 +135,38 @@ def disp(tex):
     quantiles = [0.5, 99.9];
     pylab.clim(np.percentile(t, quantiles))
 
+"""
+Starting with a GeoTIF file, run:
+$ gdal_calc.py -A INPUT.tif --outfile=OUTPUT.bin --calc="A*(A>-30000)" --NoDataValue=0 --format=ENVI
+This converts the GeoTIF file to a flat binary file (the ENVI standard), and
+replaces the original NoDataValue of -32K with 0, so we don't have to do it
+here.
 
+Then call 
+```
+run("INPUT.tif", "OUTPUT.bin", hankelTaps=1984, L=(7000, 7000))
+```
+The filter will be of size `hankelTaps / 2 + 32`, or, in the above example, 1024
+by 1024. `L` is a two-tuple and gives the size of the sub-convolutions that
+overlap-add will perform using the FFT. Make this as big as possible, given your
+memory limits. It doesn't need to be square. You want to set `L` such that `L +
+(size of filter) - 1` is just below a power-of-two. In this example, `7000 +
+1024 - 1` is 8023, which is just below 8K, or 8192.
+"""
 if __name__ == '__main__':
-# t = run('chgis_dem.tif', 'foo.bin', 960)
-    t = run('/Users/ahmed.fasih/Documents/Personal/textureShading-Asia/Data/SRTM_NE_250m.tif',
-        '/Users/ahmed.fasih/Documents/Personal/textureShading-Asia/Data/ne-land-single.bin',
-        960, L=(2*3500, 2*3500))
+    datadir = '/Users/ahmed.fasih/Documents/Personal/textureShading-Asia/Data/'
+
+    if not True:  # Testing
+        intif = datadir + 'east_0.1.tif'
+        inbin = datadir + 'east_0.1.bin'
+        t = run(intif, inbin, hankelTaps=288, L=(500, 500))
+    else:
+        intif = datadir + 'east-land.tif'
+        inbin = datadir + 'east-land.bin'
+        t = run(intif, inbin, hankelTaps=4032, L=(6100, 14300))
+    
+    postProcess(t, intif)
+
 
 def sph2cart(az, el, r=6371e3):
     x = r * np.cos(el) * np.cos(az)
