@@ -119,6 +119,9 @@ if climateColor:
 
 exploreSpaceVarying = True
 if exploreSpaceVarying:
+    minmax = lambda x: [x.min(), x.max()]
+    maxmin = lambda x: [x.max(), x.min()]
+
     import halfbandfilter as hb
     from scipy.signal import convolve2d
     import gdal, gdalconst
@@ -127,33 +130,43 @@ if exploreSpaceVarying:
     rEarth = 6371e3 # meters
     
     yfft = tex.filenameToTexture(filename)
+    dataMask = np.logical_not(tex.filenameToNoDataMask(filename))
 
-    h = big.makeHalfHankel(256*2, 32*2)
     x = tex.filenameToData(filename)
     x[tex.filenameToNoDataMask(filename)] = 0
-    filterSize = h.shape
     origSize = x.shape
+    ll = tex.filenameToLatsLons(filename)
 
-    yolafull = ola.overlapadd2(x, h, L=[3000, 3000], verbose=True)
-    yola = yolafull[filterSize[0]/2:filterSize[0]/2+origSize[0], 
+    """
+    The bigger the filter, the more area it considers. A big filter doesn't make
+    Siberia look better, in fact, it lowers it a tiny bit. Also, the
+    latitude-scaling that the FFT technique does doesn't seem to make things
+    better in this spatial-domain filtering, so don't do it.
+    """
+    h = big.makeHalfHankel(256*8, 32*2)
+    h = big.makeHalfHankel(256*2, 32*2)
+    filterSize = h.shape
+    if not True:
+        x2 = tex.scaleByPixelArea(x, ll['lats'], [0.0, ll['lonSpacing']])
+    else:
+        x2 = x
+    yola = ola.overlapadd2(x2, h, L=[3000, 3000], verbose=True)
+    yola = yola[filterSize[0]/2:filterSize[0]/2+origSize[0], 
                     filterSize[1]/2:filterSize[1]/2+origSize[1] ]
-    
-    minmax = lambda x: [x.min(), x.max()]
-    maxmin = lambda x: [x.max(), x.min()]
-    if True:    # orig grid
-        ll = tex.filenameToLatsLons(filename)
-        ll['lons'] = ll['lons'][:-1]
-        ll['lats'] = ll['lats'][:-1]
-        (lon, lat) = np.meshgrid(ll['lons'], ll['lats'])
-        boxRadius = np.deg2rad(h.shape[0] / 2 * ll['lonSpacing']) * rEarth # meters
-    else:           # fine grid
-        ll = dict()
+
+    im2lim = lambda x: tex.dataToPercentileLimits(x[dataMask], percentiles, postPercentileScale)
+    if not True:  # Overwrite with fine grid
         ll['lonSpacing'] = 0.01
         ll['latSpacing'] = -0.01
         ll['lons'] = np.arange(-30.0, 180.0, ll['lonSpacing'])
         ll['lats'] = np.arange(60, -60, ll['latSpacing'])
         (lon, lat) = np.meshgrid(ll['lons'], ll['lats'])
         boxRadius = np.deg2rad(1024 / 2 * ll['lonSpacing']) * rEarth # meters
+    else:
+        ll['lons'] = ll['lons'][:-1]
+        ll['lats'] = ll['lats'][:-1]
+        (lon, lat) = np.meshgrid(ll['lons'], ll['lats'])
+        boxRadius = np.deg2rad(h.shape[0] / 2 * ll['lonSpacing']) * rEarth # meters
 
     # center = {'lat' : ll['lats'][200], 'lon' : ll['lons'][250]}
     center = {'lat' : 40.0, 'lon' : -5.0}
@@ -194,8 +207,15 @@ if exploreSpaceVarying:
     Findings: for very fine grids (small filters, in terms of spatial radius),
     an output pixel at large-latitudes represents the convolution over a
     near-trapezoidal mask in the input. For coarse grids (large filters), the
-    shape is an elongated, vase-like mask.
+    shape is an elongated, vase-like mask. Of course, the trapezoid is this vase
+    at very small extents.
     """
+    if False:
+        import pylab
+        pylab.ion()
+        pylab.figure()
+        pylab.imshow(mask)
+        pylab.set_cmap('gray')
 
     errLat = np.linalg.norm(np.array(big.sphd2cart(center['lon'], center['lat'])) -
             big.sphd2cart(center['lon'], delta['lat'] + center['lat'])) - boxRadius

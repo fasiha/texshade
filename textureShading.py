@@ -4,7 +4,7 @@ import numpy.fft as fft
 import scipy.fftpack as scifft
 from osgeo import osr
 
-nextpow2 = lambda v: 2 ** np.ceil(np.log2(v)).astype(int)
+nextpow2 = lambda v: 2 ** int(np.ceil(np.log2(v)))
 
 
 def sciMoreReal(x, alpha, verbose = True):
