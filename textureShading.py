@@ -82,9 +82,14 @@ def filenameToLatsLons(fname):
             fileHandle.RasterYSize))
     latExt = np.unique(ext[:, 1])
     lonExt = np.unique(ext[:, 0])
+    
     lats = np.linspace(latExt.max(), latExt.min(), fileHandle.RasterYSize + 1)
-    lons = [0, np.diff(lonExt) / fileHandle.RasterXSize]
-    return {'lats' : lats, 'lons' : lons}
+    latSpacing = np.diff(latExt)[0] / fileHandle.RasterYSize
+
+    lons = np.linspace(lonExt.min(), lonExt.max(), fileHandle.RasterXSize + 1)
+    lonSpacing = np.diff(lonExt)[0] / fileHandle.RasterXSize
+    return {'lats' : lats, 'lons' : lons, 'latSpacing' : latSpacing,
+            'lonSpacing' : lonSpacing}
 
 def scaleByPixelArea(x, lats, lons):
     areas = latLonRectToArea(lats, lons)
@@ -116,7 +121,7 @@ def filenameToTexture(fname, alpha = 0.5, ndvReplacement = 0.0, verbose = True):
     if verbose: print "Loaded data"
 
     x[x==ndv] = ndvReplacement
-    x = scaleByPixelArea(x, latsLons['lats'], latsLons['lons'])
+    x = scaleByPixelArea(x, latsLons['lats'], [0, latsLons['lonSpacing']])
     if verbose: print "Done preprocessing"
     
     x = sciMoreReal(x, alpha)

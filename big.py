@@ -80,3 +80,12 @@ if __name__ == '__main__':
         '/Users/ahmed.fasih/Documents/Personal/textureShading-Asia/Data/ne-land-single.bin',
         960, L=(2*3500, 2*3500))
 
+def sph2cart(az, el, r=6371e3):
+    x = r * np.cos(el) * np.cos(az)
+    y = r * np.cos(el) * np.sin(az)
+    z = r * np.sin(el)
+    return (x, y, z)
+
+def sphd2cart(az, el, r=6371e3):
+    return sph2cart(np.deg2rad(az), np.deg2rad(el), r)
+

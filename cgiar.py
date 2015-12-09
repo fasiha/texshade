@@ -6,7 +6,7 @@ mkmed = lambda : ('Data/east_0.01.tif', 'Data/koeppen-0.01.tif')
 
 filename, koeppenRasterFile = mksmall()
 
-generateData = not True # if false, tries to load raw from disk
+generateData = True # if false, tries to load raw from disk
 saveRaw = True
 writeTif = not True
 writePng = not True
@@ -44,7 +44,8 @@ if writePng:
     print "Saved PNG"
 
 # Koeppen-Geiger climate coloring
-if 1:
+climateColor = not True
+if climateColor:
     # This is the min/max of the texture we'll be using
     dataMask = np.logical_not(tex.filenameToNoDataMask(filename))
     limits = tex.dataToPercentileLimits(data[dataMask], 
@@ -116,3 +117,87 @@ if 1:
     tex.CreateGeoTiff('col.tif', dataClim, driver, newNDV, xsize, ysize, 
             GeoT, Projection, gdalconst.GDT_Byte, numBands=3)
 
+exploreSpaceVarying = True
+if exploreSpaceVarying:
+    import halfbandfilter as hb
+    from scipy.signal import convolve2d
+    import gdal, gdalconst
+    import big
+    import overlapadd2 as ola
+    rEarth = 6371e3 # meters
+    
+    yfft = tex.filenameToTexture(filename)
+
+    h = big.makeHalfHankel(256*2, 32*2)
+    x = tex.filenameToData(filename)
+    x[tex.filenameToNoDataMask(filename)] = 0
+    filterSize = h.shape
+    origSize = x.shape
+
+    yolafull = ola.overlapadd2(x, h, L=[3000, 3000], verbose=True)
+    yola = yolafull[filterSize[0]/2:filterSize[0]/2+origSize[0], 
+                    filterSize[1]/2:filterSize[1]/2+origSize[1] ]
+    
+    minmax = lambda x: [x.min(), x.max()]
+    maxmin = lambda x: [x.max(), x.min()]
+    if True:    # orig grid
+        ll = tex.filenameToLatsLons(filename)
+        ll['lons'] = ll['lons'][:-1]
+        ll['lats'] = ll['lats'][:-1]
+        (lon, lat) = np.meshgrid(ll['lons'], ll['lats'])
+        boxRadius = np.deg2rad(h.shape[0] / 2 * ll['lonSpacing']) * rEarth # meters
+    else:           # fine grid
+        ll = dict()
+        ll['lonSpacing'] = 0.01
+        ll['latSpacing'] = -0.01
+        ll['lons'] = np.arange(-30.0, 180.0, ll['lonSpacing'])
+        ll['lats'] = np.arange(60, -60, ll['latSpacing'])
+        (lon, lat) = np.meshgrid(ll['lons'], ll['lats'])
+        boxRadius = np.deg2rad(1024 / 2 * ll['lonSpacing']) * rEarth # meters
+
+    # center = {'lat' : ll['lats'][200], 'lon' : ll['lons'][250]}
+    center = {'lat' : 40.0, 'lon' : -5.0}
+    def radiusCenterToDeltaLat(boxRadius, center, rEarth=6371e3):
+        return np.rad2deg(boxRadius / rEarth)
+    def radiusCenterToDeltaLon(boxRadius, center, rEarth=6371e3):
+        return np.rad2deg(boxRadius / (np.cos(np.deg2rad(center['lat'])) *
+                                       rEarth))
+    def radiusCenterToDeltaLatLon(*args, **kwargs):
+        return {'lat' : radiusCenterToDeltaLat(*args, **kwargs), 
+                'lon' : radiusCenterToDeltaLon(*args, **kwargs)}
+
+    delta = radiusCenterToDeltaLatLon(boxRadius, center)
+    delta0 = radiusCenterToDeltaLatLon(boxRadius, {'lat': 0, 'lon': 0})
+
+    between = lambda x, center, radius: np.logical_and(x <= center + radius, 
+                                                       x >= center - radius)
+    def radiusCenterToMask(boxRadius, center, rEarth=6371e3):
+        deltaLat = radiusCenterToDeltaLat(boxRadius, center, rEarth)
+        latMask = between(ll['lats'], center['lat'], deltaLat)
+        relevantLats = ll['lats'][latMask]
+        deltaLonForRelevantLats = np.array(map(lambda lat: 
+                radiusCenterToDeltaLon(boxRadius, {'lat':lat,
+                                                   'lon':center['lon']}, rEarth),
+                relevantLats))
+        lonMask = np.array(map(lambda deltaLon: between(ll['lons'], 
+                                                        center['lon'], 
+                                                        deltaLon),
+                     deltaLonForRelevantLats))
+        mask = np.zeros(lon.shape, dtype=np.bool)
+        mask[latMask] = lonMask
+        return mask
+    mask = radiusCenterToMask(boxRadius, center)
+    sizesHoriz = lambda x: minmax(np.array(filter(lambda x: x, map(np.sum, x))))
+    sizes = lambda x: map(sizesHoriz, [x, x.T])
+    print sizes(mask)
+    """
+    Findings: for very fine grids (small filters, in terms of spatial radius),
+    an output pixel at large-latitudes represents the convolution over a
+    near-trapezoidal mask in the input. For coarse grids (large filters), the
+    shape is an elongated, vase-like mask.
+    """
+
+    errLat = np.linalg.norm(np.array(big.sphd2cart(center['lon'], center['lat'])) -
+            big.sphd2cart(center['lon'], delta['lat'] + center['lat'])) - boxRadius
+    errLon = np.linalg.norm(np.array(big.sphd2cart(center['lon'], center['lat'])) -
+            big.sphd2cart(center['lon'] + delta['lon'], center['lat'])) - boxRadius
