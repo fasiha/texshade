@@ -179,6 +179,12 @@ if __name__ == '__main__':
     
     postProcess(t, intif)
 
+def makeTileCommand(filename):
+    ll = tex.filenameToLatsLons(filename)
+    NDV, xsize, ysize, GeoT, Projection, DataType = tex.GetGeoInfo(filename)
+    return "gdal_translate -of VRT -a_srs EPSG:4326 -gcp 0 0 {} {} -gcp {} 0 {} {} -gcp {} {} {} {} {} ne.vrt && gdalwarp -of VRT -t_srs EPSG:4326 ne.vrt ne2.vrt && gdal2tiles.py -p mercator -a 0,0,0 ne2.vrt".format(ll['lonExt'][0], ll['latExt'][1], xsize, ll['lonExt'][1], ll['latExt'][1], xsize, ysize, ll['lonExt'][1], ll['latExt'][0], filename)
+    
+
 """
 To remove lakes *in-place*:
 

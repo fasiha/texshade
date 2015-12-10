@@ -89,7 +89,7 @@ def filenameToLatsLons(fname):
     lons = np.linspace(lonExt.min(), lonExt.max(), fileHandle.RasterXSize + 1)
     lonSpacing = np.diff(lonExt)[0] / fileHandle.RasterXSize
     return {'lats' : lats, 'lons' : lons, 'latSpacing' : latSpacing,
-            'lonSpacing' : lonSpacing}
+            'lonSpacing' : lonSpacing, 'latExt' : latExt, 'lonExt' : lonExt}
 
 def scaleByPixelArea(x, lats, lons):
     areas = latLonRectToArea(lats, lons)
