@@ -56,8 +56,7 @@ tex.CreateGeoTiff(texTif, tint, driver, newNDV, xsize, ysize, GeoT, Projection,
 """
 Then:
 
-$ gdal_translate -of VRT -a_srs EPSG:4326 -gcp 0 0 -30.0104168  60.0104165 -gcp 100810 0 180.0104162 60.0104165 -gcp 100810 28810 180.0104162  -0.0104168 ne.ti
-f ne.vrt
+$ gdal_translate -of VRT -a_srs EPSG:4326 -gcp 0 0 -30.0104168  60.0104165 -gcp 100810 0 180.0104162 60.0104165 -gcp 100810 28810 180.0104162  -0.0104168 ne.tif ne.vrt
 $ gdalwarp -of VRT -t_srs EPSG:4326 ne.vrt ne2.vrt
 $ gdal2tiles.py -p mercator -a 0,0,0 ne2.vrt
 

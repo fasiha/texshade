@@ -90,22 +90,25 @@ def estimateLimits(subtexture, ndvMask, percentiles, postPercentileScale,
     limits = rawLimits * postPercentileScale
     return tuple(limits)
 
-def postProcess(subtexture, elevTifName, percentiles=[0.1, 99.9], 
-                postPercentileScale=[1.0, 1.0], verbose=True):
+def postProcess(subtexture, elevTifName, limits=None, 
+                percentiles=[0.1, 99.9], postPercentileScale=[1.0, 1.0],
+                texTifName='subtex.tif', verbose=True):
     # Find no-data mask from original file, which should be the water portions
     # of the world according to Natural Earth vector data
     ndvMask = tex.filenameToNoDataMask(elevTifName)
     if verbose:
         print("Generated no-data mask")
     
-    # Get a soft-estimate of the color limits within `percentiles` percentiles
-    limits = estimateLimits(subtexture, ndvMask, percentiles,
-            postPercentileScale)
-    if verbose:
-        print("Estimated fuzzy limits")
+    if limits is None:
+        # Get a soft-estimate of the color limits within `percentiles`
+        # percentiles
+        limits = estimateLimits(subtexture, ndvMask, percentiles,
+                postPercentileScale)
+        if verbose:
+            print("Estimated fuzzy limits", limits)
 
     # Within those limits, rescale to 1-255 (leaving 0 as a new no-data value)
-    intTex = tex.touint(subtexture, *limits, dtype=np.uint8)
+    intTex = tex.touintChunked(subtexture, *limits, dtype=np.uint8)
     if verbose:
         print("Converted to byte image")
 
@@ -119,11 +122,17 @@ def postProcess(subtexture, elevTifName, percentiles=[0.1, 99.9],
     driver = gdal.GetDriverByName('GTiff')
     NDV, xsize, ysize, GeoT, Projection, DataType = tex.GetGeoInfo(elevTifName)
 
-    tex.CreateGeoTiff('subtex.tif', intTex, driver, newNDV, xsize, ysize, 
+    tex.CreateGeoTiff(texTifName, intTex, driver, newNDV, xsize, ysize, 
             GeoT, Projection, gdalconst.GDT_Byte)
     if verbose:
         print("Done saving.")
+    return limits
 
+def loadTexMemmap(fname, shape):
+    return np.memmap(fname, dtype=np.float32, mode='r', shape=shape)
+
+def loadByteMemmap(fname, shape):
+    return np.memmap(fname, dtype=np.uint8, mode='r', shape=shape)
 
 def disp(tex):
     import pylab
@@ -163,10 +172,18 @@ if __name__ == '__main__':
     else:
         intif = datadir + 'east-land.tif'
         inbin = datadir + 'east-land.bin'
+
+        intif = datadir + 'w-land.tif'
+        inbin = datadir + 'w-land.bin'
         t = run(intif, inbin, hankelTaps=4032, L=(6100, 14300))
     
     postProcess(t, intif)
 
+"""
+To remove lakes *in-place*:
+
+$ gdal_rasterize -sql "SELECT * FROM ne_10m_lakes WHERE scalerank=0" -burn 0  Data/ne_10m_lakes/ne_10m_lakes.shp INPUT.tif
+"""
 
 def sph2cart(az, el, r=6371e3):
     x = r * np.cos(el) * np.cos(az)

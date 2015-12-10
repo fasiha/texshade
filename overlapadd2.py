@@ -107,6 +107,8 @@ def overlapadd2(Amat, Hmat, L=None, Nfft=None, y=None, verbose=False):
                 yt[:(thisend[YDIM] - start[YDIM]),
                     :(thisend[XDIM] - start[XDIM])])
             start[YDIM] += L[YDIM]
+            
+            del yt  # helps!
         start[XDIM] += L[XDIM]
     return y
 
