@@ -26,6 +26,12 @@ sol = sympy.integrate(rS ** aS * rS * sympy.besselj(0, 2 * sympy.pi * vS * rS),
 alpha = 0.5
 N = 20
 
+if True:
+    radii = np.arange(0, 32*1024+1e-3, 1/32.0)
+    from multiprocessing import Pool
+    pool = Pool(processes=7)
+    hyper = pool.map(lambda x: sol.evalf(subs={aS: alpha, vS: x}), radii)
+
 evalSol = np.vectorize(lambda x: sol.evalf(subs={aS: alpha, vS: x}),
         otypes=[float])
 denseVec = np.linspace(0, N / 2, 256)
