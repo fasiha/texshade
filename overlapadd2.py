@@ -1,5 +1,5 @@
 import numpy as np
-from numpy.fft import fft2, ifft2
+from numpy.fft import fft2, ifft2, rfft2, irfft2
 
 
 def overlapadd2(Amat, Hmat, L=None, Nfft=None, y=None, verbose=False):
@@ -84,9 +84,13 @@ def overlapadd2(Amat, Hmat, L=None, Nfft=None, y=None, verbose=False):
     if not (Amat.ndim <= 2 and Hmat.ndim <= 2):
         raise ValueError('Amat and Hmat must be 2D arrays')
 
+    realOnly = np.isrealobj(Amat) and np.isrealobj(Hmat)
+    if realOnly:
+        ifft2 = irfft2
+        fft2 = rfft2
+
     Hf = fft2(Hmat, Nfft)
 
-    realOnly = np.isrealobj(Amat) and np.isrealobj(Hmat)
     (XDIM, YDIM) = (1, 0)
     start = [0, 0]
     endd = [0, 0]
@@ -144,13 +148,3 @@ if __name__ == '__main__':
     test()
 
 
-# Can't use these 2D real FFTs as-is because multiplying two real-FFTs is
-# complicated due to complex multiplication:
-#   (a + jb) * (c + jd) = (ac - bd) + j(ad + bc)
-# And scipy.fftpack.rfft stores real/imag in a weird interleaved format that
-# makes this multiplication not straightforward.
-import scipy.fftpack as scifft
-rfft2 = lambda x, N: scifft.rfft(scifft.rfft(x, N[1], axis=1, overwrite_x=True),
-        N[0], axis=0, overwrite_x=True)
-irfft2 = lambda X: scifft.irfft(scifft.irfft(X, axis=0, overwrite_x=True),
-        axis=1, overwrite_x=True)
