@@ -39,8 +39,8 @@ def makeHalfHankel(N, hbTaps=64):
     
     return finalFilter
 
-def memmapInput(origfilename, binfilename, memmapMode='r'):
-    fileHandle = gdal.Open(origfilename, gdalconst.GA_ReadOnly)
+def memmapInput(binfilename, memmapMode='r'):
+    fileHandle = gdal.Open(binfilename, gdalconst.GA_ReadOnly)
     width, height = (fileHandle.RasterXSize, fileHandle.RasterYSize)
 
     inmap = np.memmap(binfilename, dtype=np.int16, mode=memmapMode,
@@ -50,22 +50,22 @@ def memmapInput(origfilename, binfilename, memmapMode='r'):
 def memmapOutput(fname, shape):
     return np.memmap(fname, dtype=np.float32, mode='w+', shape=tuple(shape))
 
-def run(elevTifName, elevBinName, hankelTaps=960, L=(3500, 3500), verbose=True):
-    elevation = memmapInput(elevTifName, elevBinName)
+def run(elevBinName, hankelTaps=960, L=(3500, 3500), verbose=True, workingDir='./'):
+    elevation = memmapInput(elevBinName)
 
     hankelFilter = makeHalfHankel(hankelTaps)
     if verbose:
         print 'filter size:', hankelFilter.shape
     outSize = np.array(elevation.shape) + hankelFilter.shape - 1
 
-    texture = memmapOutput('tex.bin', outSize)
+    texture = memmapOutput(workingDir + 'tex.bin', outSize)
     texture = ola.overlapadd2(elevation, hankelFilter, y=texture, L=L, verbose=True)
     if verbose:
         print("Done with filtering")
 
     origSize = elevation.shape
     filterSize = hankelFilter.shape
-    subtexture = memmapOutput('subtex.bin', elevation.shape)
+    subtexture = memmapOutput(workingDir + 'subtex.bin', elevation.shape)
     subtexture[:] = texture[filterSize[0]/2 : filterSize[0]/2+origSize[0], 
                             filterSize[1]/2 : filterSize[1]/2+origSize[1] ][:]
     subtexture.flush()
@@ -153,7 +153,7 @@ here.
 
 Then call 
 ```
-run("INPUT.tif", "OUTPUT.bin", hankelTaps=1984, L=(7000, 7000))
+run("OUTPUT.bin", hankelTaps=1984, L=(7000, 7000))
 ```
 The filter will be of size `hankelTaps / 2 + 32`, or, in the above example, 1024
 by 1024. `L` is a two-tuple and gives the size of the sub-convolutions that
@@ -166,18 +166,25 @@ if __name__ == '__main__':
     datadir = '/Users/ahmed.fasih/Documents/Personal/textureShading-Asia/Data/'
 
     if not True:  # Testing
+        print("Test")
         intif = datadir + 'east_0.1.tif'
         inbin = datadir + 'east_0.1.bin'
-        t = run(intif, inbin, hankelTaps=288, L=(500, 500))
-    else:
+        t = run(inbin, hankelTaps=288, L=(500, 500))
+    elif False: # 250 meter data
+        print("250 meter data, east or west")
         intif = datadir + 'east-land.tif'
         inbin = datadir + 'east-land.bin'
 
         intif = datadir + 'w-land.tif'
         inbin = datadir + 'w-land.bin'
-        t = run(intif, inbin, hankelTaps=4032, L=(6100, 14300))
+        t = run(inbin, hankelTaps=12224, L=(6100, 14300))
+    else:  # 90 meter data!
+        print("90 meter data!")
+        datadir = '/Volumes/SeagateBack/Fasih/90m/'
+        inbin = datadir + 'land.bin'
+        run(inbin, hankelTaps=12224, L=(10000, 10000), workingDir=datadir)
     
-    postProcess(t, intif)
+    # postProcess(t, intif)
 
 def makeTileCommand(filename):
     ll = tex.filenameToLatsLons(filename)
