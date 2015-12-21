@@ -129,20 +129,28 @@ def filenameToTexture(fname, alpha = 0.5, ndvReplacement = 0.0, verbose = True):
     
     return x
 
-def touintChunked(x, cmin, cmax, dtype=np.uint16, verbose=False, ret=None):
+def touintChunked(x, cmin, cmax, dtype=np.uint16, verbose=False, ret=None,
+        mask=None):
     maxval = dtype(2 ** (8 * dtype().itemsize) - 1e-3)
     slope = (maxval - 1.0) / (cmax - cmin)
+
     # allocate up-front if needed
     if ret is None:
         ret = np.zeros(x.shape, dtype=dtype)
+    
     # clamp x between cmin and cmax. Map [cmin, cmax] to [1, 2**depth-1-1e-3]
     # linearly. Reserve 0 for nodata.
     for i in xrange(x.shape[0]):
         if verbose: print("Row {} of {}".format(i, x.shape[0]))
-        ret[i] = ((x[i] <= cmin) * 1 + 
-                (x[i] >= cmax) * maxval + 
-                np.logical_and(x[i] > cmin, x[i] < cmax) * (slope * (x[i] -
-                    cmin) + 1))
+        if mask is None:
+            thisMask = np.newaxis
+        else:
+            thisMask = mask[i].astype(np.bool)
+        ret[i, thisMask] = ((x[i, thisMask] <= cmin) * 1 + 
+                (x[i, thisMask] >= cmax) * maxval + 
+                np.logical_and(x[i, thisMask] > cmin, 
+                               x[i, thisMask] < cmax) * 
+                    (slope * (x[i] - cmin) + 1))
     return ret
 
 def touint(x, cmin, cmax, dtype = np.uint16):
