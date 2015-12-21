@@ -39,12 +39,14 @@ def makeHalfHankel(N, hbTaps=64):
     
     return finalFilter
 
-def memmapInput(binfilename, memmapMode='r'):
-    fileHandle = gdal.Open(binfilename, gdalconst.GA_ReadOnly)
-    width, height = (fileHandle.RasterXSize, fileHandle.RasterYSize)
+def memmapInput(binfilename, memmapMode='r', dtype=np.int16, shape=None):
+    if shape is None:
+        fileHandle = gdal.Open(binfilename, gdalconst.GA_ReadOnly)
+        width, height = (fileHandle.RasterXSize, fileHandle.RasterYSize)
+        shape = (height, width)
 
-    inmap = np.memmap(binfilename, dtype=np.int16, mode=memmapMode,
-            shape=(height, width))
+    inmap = np.memmap(binfilename, dtype=dtype, mode=memmapMode,
+            shape=shape)
     return inmap
     
 def memmapOutput(fname, shape):
@@ -74,65 +76,88 @@ def run(elevBinName, hankelTaps=960, L=(3500, 3500), verbose=True, workingDir='.
 
     return subtexture
 
-def estimateLimits(subtexture, ndvMask, percentiles, postPercentileScale, 
-                   skip=10, nbins=1000):
-    hist, binEdges = np.histogram(subtexture[np.logical_not(ndvMask)][::skip],
-            bins=nbins, density=True)
+class RunningHist:
+    def __init__(self, lo, hi, nbins=1000):
+        self.range = (lo, hi)
+        self.nbins = nbins
+        self.bins = np.linspace(lo, hi, nbins+1)
+        self.frequencies = np.zeros(nbins)
+    def __call__(self, data):
+        newFreq, _ = np.histogram(data, bins=self.bins, range=self.range, density=False)
+        self.frequencies += newFreq
+    def pmf(self):
+        return (self.frequencies / (np.sum(self.frequencies) * np.diff(self.bins[:2])), self.bins)
+
+def bigMinmax(x, mask):
+    lo = np.finfo(x.dtype).max
+    hi = np.finfo(x.dtype).min
+    for i in xrange(len(x)):
+        row = x[i, mask[i].astype(np.bool)]
+        if row.size > 0:
+            lo = min(lo, row.min())
+            hi = max(hi, row.max())
+    return [lo, hi]
+
+def estimateLimits(subtexture, mask, percentiles, postPercentileScale, 
+                   skip=10, nbins=1000, small=False):
+    if small:
+        hist, binEdges = np.histogram(subtexture[mask][::skip],
+                bins=nbins, density=True)
+    else:
+        lohi = bigMinmax(subtexture, mask)
+        h = RunningHist(*lohi, nbins=1000)
+        for i in xrange(len(subtexture)):
+            h(subtexture[i, mask[i].astype(np.bool)][::skip])
+        hist, binEdges = h.pmf()
     distribution = np.cumsum(hist) * np.diff(binEdges[:2])
     
     loIdx = np.sum(distribution < percentiles[0] / 100.0)
     hiIdx = np.sum(distribution < percentiles[1] / 100.0)
     
-    if loIdx == 0 or hiIdx == nbins:
-        print("Histogram with {} bins insufficient to estimate percentiles".format(nbins))
+    if loIdx == 0 or hiIdx == nbins or hiIdx == loIdx:
+        print("Histogram with {} bins insufficient to estimate percentiles: lo={} and hi={}".format(nbins, loIdx, hiIdx))
 
     rawLimits = np.array([binEdges[loIdx], binEdges[hiIdx]])
     limits = rawLimits * postPercentileScale
     return tuple(limits)
 
-def postProcess(subtexture, elevTifName, limits=None, 
+def postProcess(subtexture, maskName, limits=None, 
                 percentiles=[0.1, 99.9], postPercentileScale=[1.0, 1.0],
-                texTifName='subtex.tif', verbose=True):
+                texTifName=None, verbose=True):
     # Find no-data mask from original file, which should be the water portions
     # of the world according to Natural Earth vector data
-    ndvMask = tex.filenameToNoDataMask(elevTifName)
+    landMask = memmapInput(maskName, memmapMode='r+', dtype=np.uint8)
     if verbose:
         print("Generated no-data mask")
     
     if limits is None:
         # Get a soft-estimate of the color limits within `percentiles`
         # percentiles
-        limits = estimateLimits(subtexture, ndvMask, percentiles,
+        limits = estimateLimits(subtexture, landMask, percentiles,
                 postPercentileScale)
         if verbose:
             print("Estimated fuzzy limits", limits)
 
     # Within those limits, rescale to 1-255 (leaving 0 as a new no-data value)
-    intTex = tex.touintChunked(subtexture, *limits, dtype=np.uint8)
+    landMask = tex.touintChunked(subtexture, *limits, dtype=np.uint8, ret=landMask)
     if verbose:
         print("Converted to byte image")
 
-    # In the byte image, reinstate the no-data mask with 0
+    if texTifName is None:
+        return limits
+
+    # In the byte image, the no-data value is 0. Don't reinstate it here: do so outside Python
     newNDV = 0
-    intTex[ndvMask] = newNDV
-    if verbose:
-        print("Reinstated mask")
 
     # Save!
     driver = gdal.GetDriverByName('GTiff')
-    NDV, xsize, ysize, GeoT, Projection, DataType = tex.GetGeoInfo(elevTifName)
+    NDV, xsize, ysize, GeoT, Projection, DataType = tex.GetGeoInfo(maskName)
 
-    tex.CreateGeoTiff(texTifName, intTex, driver, newNDV, xsize, ysize, 
+    tex.CreateGeoTiff(texTifName, landMask, driver, newNDV, xsize, ysize, 
             GeoT, Projection, gdalconst.GDT_Byte)
     if verbose:
         print("Done saving.")
     return limits
-
-def loadTexMemmap(fname, shape):
-    return np.memmap(fname, dtype=np.float32, mode='r', shape=shape)
-
-def loadByteMemmap(fname, shape):
-    return np.memmap(fname, dtype=np.uint8, mode='r', shape=shape)
 
 def disp(tex):
     import pylab
@@ -177,12 +202,13 @@ if __name__ == '__main__':
 
         intif = datadir + 'w-land.tif'
         inbin = datadir + 'w-land.bin'
-        t = run(inbin, hankelTaps=12224, L=(6100, 14300))
+        t = run(inbin, hankelTaps=4032, L=(6100, 14300))
     else:  # 90 meter data!
         print("90 meter data!")
-        datadir = '/Volumes/SeagateBack/Fasih/90m/'
+        datadir = '/Users/ahmed.fasih/Documents/Personal/textureShading-Asia/'
+        wdir = '/Volumes/SeagateBack/Fasih/90m/'
         inbin = datadir + 'land.bin'
-        run(inbin, hankelTaps=12224, L=(10000, 10000), workingDir=datadir)
+        run(inbin, hankelTaps=12224, L=(2000, 10000), workingDir=wdir)
     
     # postProcess(t, intif)
 
@@ -207,3 +233,18 @@ def sph2cart(az, el, r=6371e3):
 def sphd2cart(az, el, r=6371e3):
     return sph2cart(np.deg2rad(az), np.deg2rad(el), r)
 
+"""
+import numpy as np
+import gdal, gdalconst
+import textureShading as tex
+import big
+
+mask = big.memmapInput('land-mask.bin',dtype=np.uint8)
+text = big.memmapInput('/Volumes/SeagateBack/Fasih/90m/subtex.bin', shape=mask.shape, dtype=np.single)
+big.postProcess(text, 'land-mask.bin')
+
+
+mask = big.memmapInput('land-mask-0.1.bin',dtype=np.uint8)
+text = big.memmapInput('subtex.bin',shape=mask.shape,dtype=np.single)
+big.postProcess(text, 'land-mask-0.1.bin', texTifName='small-runninghist.tif')
+"""
