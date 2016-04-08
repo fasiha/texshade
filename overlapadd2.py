@@ -2,28 +2,29 @@ import numpy as np
 from numpy.fft import fft2, ifft2, rfft2, irfft2
 
 
-def overlapadd2(Amat, Hmat, L=None, Nfft=None, y=None, verbose=False):
+def overlapadd2(A, Hmat, L=None, Nfft=None, y=None, verbose=False, Na=None,
+        ydtype=None):
     """
     Fast two-dimensional linear convolution via the overlap-add method.
 
     The overlap-add method is well-suited to convolving a very large array,
-    `Amat`, with a much smaller filter array, `Hmat` by breaking the large
+    `A`, with a much smaller filter array, `Hmat` by breaking the large
     convolution into many smaller `L`-sized sub-convolutions, and evaluating
     these using the FFT. The computational savings over the straightforward
     two-dimensional convolution via, say, scipy.signal.convolve2d, can be
-    substantial for large Amat and/or Hmat.
+    substantial for large A and/or Hmat.
 
     Parameters
     ----------
-    Amat, Hmat : array_like
+    A, Hmat : array_like
         Two-dimensional input arrays to be convolved. For computational
-        purposes, Amat should be larger.
+        purposes, A should be larger.
     L : sequence of two ints, optional
         Length of sub-convolution to use. This should ideally be as large as
         possible to obtain maximum speedup: that is, if you have the memory to
         compute the linear convolution using FFT2, i.e., replacing spatial
         convolution with frequency-domain multiplication, then let `L =
-        np.array(Amat.shape) + np.array(Hmat.shape) - 1`. Usually, though, you
+        np.array(A.shape) + np.array(Hmat.shape) - 1`. Usually, though, you
         are considering overlap-add because you can't afford a batch transform
         on your arrays, so make `L` as big as you can.
     Nfft : sequence of two ints, optional
@@ -41,16 +42,16 @@ def overlapadd2(Amat, Hmat, L=None, Nfft=None, y=None, verbose=False):
     Returns
     -------
     y : same as passed in, or ndarray if no `y` passed in
-        The `np.array(Amat.shape) + np.array(Hmat.shape) - 1`-sized
+        The `np.array(A.shape) + np.array(Hmat.shape) - 1`-sized
         two-dimensional array containing the linear convolution. Should be
-        within machine precision of, e.g., `scipy.signal.convolve2d(Amat,
+        within machine precision of, e.g., `scipy.signal.convolve2d(A,
         Hmat, 'full')`.
 
     Raises
     ------
     ValueError if `L` and `Nfft` aren't two-element, and too small: both
     elements of `L` must be greater than zero, and `Nfft`'s must be greater
-    than `L + np.array(Hmat.shape) - 1`. Also if `Amat` or `Hmat` aren't
+    than `L + np.array(Hmat.shape) - 1`. Also if `A` or `Hmat` aren't
     two-dimensional arrays, or if `y` doesn't have the correct size to store
     the output of the linear convolution.
 
@@ -59,10 +60,19 @@ def overlapadd2(Amat, Hmat, L=None, Nfft=None, y=None, verbose=False):
     Wikipedia is only semi-unhelpful on this topic: see "Overlap-add method".
     """
     M = np.array(Hmat.shape)
-    Na = np.array(Amat.shape)
+    if not hasattr(A, '__call__'): # not a function!
+        Afun = lambda a, b, c, d: A[a:b, c:d]
+    else:
+        Afun = A
+
+    if Na is None:
+        Na = np.array(A.shape)
+
+    if ydtype is None:
+        ydtype = A.dtype
 
     if y is None:
-        y = np.zeros(M + Na - 1, dtype=Amat.dtype)
+        y = np.zeros(M + Na - 1, dtype=A.dtype)
     elif y.shape != tuple(M + Na - 1):
         raise ValueError('y given has incorrect dimensions', M + Na - 1)
 
@@ -81,10 +91,8 @@ def overlapadd2(Amat, Hmat, L=None, Nfft=None, y=None, verbose=False):
     if not (np.all(Nfft >= L + M - 1) and Nfft.size == 2):
         raise ValueError('Nfft must have two elements >= L + M - 1 where '
                          'M = Hmat.shape')
-    if not (Amat.ndim <= 2 and Hmat.ndim <= 2):
-        raise ValueError('Amat and Hmat must be 2D arrays')
 
-    realOnly = np.isrealobj(Amat) and np.isrealobj(Hmat)
+    realOnly = np.isrealobj(Afun(0, 1, 0, 1)) and np.isrealobj(Hmat)
     if realOnly:
         myifft2, myfft2 = (irfft2, rfft2)
     else:
@@ -102,8 +110,8 @@ def overlapadd2(Amat, Hmat, L=None, Nfft=None, y=None, verbose=False):
             endd[YDIM] = min(start[YDIM] + L[YDIM], Na[YDIM])
             if verbose:
                 print("Input start", start, "Input end", endd, "FFT size", Nfft)
-            yt = myifft2(Hf * myfft2(Amat[start[YDIM] : endd[YDIM], 
-                                          start[XDIM] : endd[XDIM]], Nfft))
+            yt = myifft2(Hf * myfft2(Afun(start[YDIM], endd[YDIM], 
+                                          start[XDIM], endd[XDIM]), Nfft))
             if realOnly:
                 yt = yt.real
 
