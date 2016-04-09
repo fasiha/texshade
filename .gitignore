@@ -13,3 +13,6 @@ output/
 *.dbf
 *.shx
 
+*.bin
+*.vrt
+*.hdr
