@@ -1,3 +1,6 @@
+import gdal, gdalconst
+import textureShading as tex
+
 import itertools as itools
 import overlapadd2 as ola
 import numpy as np
@@ -9,9 +12,6 @@ interpHyper = InterpolatedUnivariateSpline(radii, hyper, ext='raise')
 
 import halfbandfilter as hb
 from scipy.signal import convolve2d
-
-import gdal, gdalconst
-import textureShading as tex
 
 def vec(v):
     return v.reshape(v.size, -1)
@@ -78,7 +78,7 @@ def run(elevBinName, hankelTaps=960, L=(3500, 3500), verbose=True,
     inBand = inHandle.GetRasterBand(1)
 
     bandNDV = inBand.GetNoDataValue()
-    cleaner = lambda arr: arr * (arr != bandNDV)
+    cleaner = lambda arr: arr * np.logical_not(np.isclose(arr, bandNDV))
 
     makeNumpyIdxToGDALRead = (lambda band: lambda start0, end0, start1, end1:
             band.ReadAsArray(start1, start0, end1-start1, end0-start0))
@@ -127,8 +127,8 @@ def run(elevBinName, hankelTaps=960, L=(3500, 3500), verbose=True,
         el1_end = outr1[good1][-1]+1
 
         ndvmask = np.ones(arr.shape, dtype=bool)
-        ndvmask[np.c_[np.where(good0)], good1] = (ndv !=
-                elevationIndexer(el0_start, el0_end, el1_start, el1_end))
+        ndvmask[np.c_[np.where(good0)], good1] = np.logical_not(np.isclose(
+            ndv, elevationIndexer(el0_start, el0_end, el1_start, el1_end)))
 
         texture[start0:end0, start1:end1] = (np.logical_not(ndvmask) * ndv +
                 ndvmask * (arr + texture[start0:end0, start1:end1]))
@@ -273,7 +273,7 @@ if __name__ == '__main__':
         print("Test")
         nedtif = '/Users/ahmed.fasih/Documents/Personal/texshading/ned-small.tif'
         srtmtif = '/Users/ahmed.fasih/Downloads/gdal-demo-cgiar-srtm/SRTM-small.tif'
-        intif = srtmtif
+        intif = nedtif or srtmtif
         t = run(intif, hankelTaps=288, L=(500, 500))
     elif False: # 250 meter data
         print("250 meter data, east or west")
