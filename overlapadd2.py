@@ -2,8 +2,7 @@ import numpy as np
 from numpy.fft import fft2, ifft2, rfft2, irfft2
 
 
-def overlapadd2(A, Hmat, L=None, Nfft=None, y=None, verbose=False, Na=None,
-        ydtype=None):
+def overlapadd2(A, Hmat, L=None, Nfft=None, y=None, verbose=False, Na=None):
     """
     Fast two-dimensional linear convolution via the overlap-add method.
 
@@ -67,9 +66,6 @@ def overlapadd2(A, Hmat, L=None, Nfft=None, y=None, verbose=False, Na=None,
 
     if Na is None:
         Na = np.array(A.shape)
-
-    if ydtype is None:
-        ydtype = A.dtype
 
     if y is None:
         y = np.zeros(M + Na - 1, dtype=A.dtype)

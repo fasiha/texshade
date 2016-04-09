@@ -52,22 +52,35 @@ def memmapInput(binfilename, memmapMode='r', dtype=np.int16, shape=None):
 def memmapOutput(fname, shape):
     return np.memmap(fname, dtype=np.float32, mode='w+', shape=tuple(shape))
 
-def run(elevBinName, hankelTaps=960, L=(3500, 3500), verbose=True, workingDir='./'):
-    elevation = memmapInput(elevBinName)
+def run(elevBinName, hankelTaps=960, L=(3500, 3500), verbose=True,
+        workingDir='./', nomatrix=True):
+    if nomatrix:
+        src = gdal.Open(elevBinName, gdalconst.GA_ReadOnly)
+        band = src.GetRasterBand(1)
+
+        bandNDV = band.GetNoDataValue()
+        cleaner = lambda arr: arr * (arr != bandNDV)
+
+        elevation = lambda start0,end0,start1,end1: cleaner(band.ReadAsArray(start1,
+                start0, end1-start1, end0-start0))
+        origSize = (src.RasterYSize, src.RasterXSize)
+    else:
+        elevation = memmapInput(elevBinName)
+        origSize = elevation.shape
 
     hankelFilter = makeHalfHankel(hankelTaps)
     if verbose:
         print 'filter size:', hankelFilter.shape
-    outSize = np.array(elevation.shape) + hankelFilter.shape - 1
+    outSize = np.array(origSize) + hankelFilter.shape - 1
 
     texture = memmapOutput(workingDir + 'tex.bin', outSize)
-    texture = ola.overlapadd2(elevation, hankelFilter, y=texture, L=L, verbose=True)
+    texture = ola.overlapadd2(elevation, hankelFilter, y=texture, L=L,
+            verbose=True, Na=origSize)
     if verbose:
         print("Done with filtering")
 
-    origSize = elevation.shape
     filterSize = hankelFilter.shape
-    subtexture = memmapOutput(workingDir + 'subtex.bin', elevation.shape)
+    subtexture = memmapOutput(workingDir + 'subtex.bin', origSize)
     subtexture[:] = texture[filterSize[0]/2 : filterSize[0]/2+origSize[0], 
                             filterSize[1]/2 : filterSize[1]/2+origSize[1] ][:]
     subtexture.flush()
@@ -188,13 +201,18 @@ memory limits. It doesn't need to be square. You want to set `L` such that `L +
 1024 - 1` is 8023, which is just below 8K, or 8192.
 """
 if __name__ == '__main__':
-    datadir = '/Users/ahmed.fasih/Documents/Personal/textureShading-Asia/Data/'
+    datadir = '/Users/ahmed.fasih/Downloads/gdal-demo-cgiar-srtm/'
 
-    if not True:  # Testing
+    if True:  # Testing
         print("Test")
-        intif = datadir + 'east_0.1.tif'
-        inbin = datadir + 'east_0.1.bin'
-        t = run(inbin, hankelTaps=288, L=(500, 500))
+        nedtif = '/Users/ahmed.fasih/Documents/Personal/texshading/ned-small.tif'
+        srtmtif = '/Users/ahmed.fasih/Downloads/gdal-demo-cgiar-srtm/SRTM-small.tif'
+        intif = srtmtif
+        t = run(intif, hankelTaps=288, L=(500, 500))
+
+        params = tex.geoFileToStruct(intif)
+        params['ndv'] = None
+        tex.structToGeoFile('subtex.tif', params, array=t, driverString='GTiff')
     elif False: # 250 meter data
         print("250 meter data, east or west")
         intif = datadir + 'east-land.tif'

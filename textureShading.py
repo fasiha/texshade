@@ -173,6 +173,33 @@ def dataToPng16(data, fname = 'pytex16.png', percentiles = [0.5, 99.9],
     limits = dataToPercentileLimits(data, percentiles, postPercentileScale)
     png.from_array(touint(data, *limits, depth = 16), 'L').save(fname)
 
+def geoFileToStruct(fname):
+    proj = osr.SpatialReference()
+
+    source = gdal.Open(fname, gdalconst.GA_ReadOnly)
+    proj.ImportFromWkt(source.GetProjectionRef())
+
+    band = source.GetRasterBand(1)
+    
+    ret = dict(ndv=band.GetNoDataValue(),
+            width=source.RasterXSize,
+            height=source.RasterYSize,
+            transform=source.GetGeoTransform(),
+            projection=proj,
+            dtype=band.DataType)
+    return ret
+
+def structToGeoFile(fname, params, array=None, driverString='GTiff'):
+    driver = gdal.GetDriverByName(driverString)
+    data = driver.Create(fname, params['width'], params['height'], 1, params['dtype'])
+    data.SetGeoTransform(params['transform'])
+    data.SetProjection(params['projection'].ExportToWkt())
+    if params['ndv'] is not None:
+        data.GetRasterBand(1).SetNoDataValue(params['ndv'])
+    if array is not None:
+        data.GetRasterBand(1).WriteArray(array)
+    return data
+
 # Adapted from EddyTheB, http://gis.stackexchange.com/a/57006/8623
 def GetGeoInfo(FileName):
     SourceDS = gdal.Open(FileName, gdalconst.GA_ReadOnly)

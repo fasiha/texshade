@@ -3,13 +3,7 @@ Download a bunch of ZIP files.
 
 Uncompress them all.
 
-Either:
-- Make a copy of each one, burning NDV, lakes, and oceans to 0.
-- Make one big ENVI.
-- Pros: parallelization. Cons: 400 GB more needed.
-OR
-- Make one big VRT,
-- and make one big float32 ENVI burning NDV, lakes, and oceans to 0.
+Make one big VRT.
 
 ## Texture generation
 Run through texture generator & save the texture as a new binary file of float32.
