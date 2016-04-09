@@ -267,15 +267,20 @@ memory limits. It doesn't need to be square. You want to set `L` such that `L +
 1024 - 1` is 8023, which is just below 8K, or 8192.
 """
 if __name__ == '__main__':
+    import sys
+    if len(sys.argv) == 1:
+        setup = "test"
+    else:
+        setup = sys.argv[-1]
+
     datadir = '/Users/ahmed.fasih/Downloads/gdal-demo-cgiar-srtm/'
 
-    if True:  # Testing
-        print("Test")
+    if setup == 'test':  # Testing
         nedtif = '/Users/ahmed.fasih/Documents/Personal/texshading/ned-small.tif'
         srtmtif = '/Users/ahmed.fasih/Downloads/gdal-demo-cgiar-srtm/SRTM-small.tif'
         intif = nedtif or srtmtif
         t = run(intif, hankelTaps=288, L=(500, 500))
-    elif False: # 250 meter data
+    elif setup == 'cgiar-250': # 250 meter data
         print("250 meter data, east or west")
         intif = datadir + 'east-land.tif'
         inbin = datadir + 'east-land.bin'
@@ -283,12 +288,15 @@ if __name__ == '__main__':
         intif = datadir + 'w-land.tif'
         inbin = datadir + 'w-land.bin'
         t = run(inbin, hankelTaps=4032, L=(6100, 14300))
-    else:  # 90 meter data!
+    elif setup == 'cgiar':  # 90 meter data!
         print("90 meter data!")
         datadir = '/Users/ahmed.fasih/Documents/Personal/textureShading-Asia/'
         wdir = '/Volumes/SeagateBack/Fasih/90m/'
         inbin = datadir + 'land.bin'
         run(inbin, hankelTaps=12224, L=(2000, 10000), workingDir=wdir)
+    elif setup == 'ned': # 10m NED data!
+        t = run('/srv/data/fasih/NED/vrt/ned.vrt', hankelTaps=12224, L=(500,
+            500), workingDir='/srv/data/fasih/NED/vrt/')
 
     # postProcess(t, intif)
 
