@@ -20,11 +20,11 @@ class EvalSol(object):
         return sol.evalf(subs={aS: self.alpha, vS: N})        
 evaler = EvalSol(alpha)
 
-radii = np.arange(0, 32*1024+1e-3, 1/32.0)
+radii = np.arange(0, 256*1024+1e-3, 1/32.0)
 # radii = np.arange(0, 0.9, 1/32.0)
 
 from multiprocessing import Pool
-pool = Pool(processes=8)
+pool = Pool()
 hyper = pool.map(evaler, radii)
 
 hyper.tofile('hyper.bin')
