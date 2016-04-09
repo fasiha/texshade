@@ -13,8 +13,9 @@ N = 20
 class EvalSol(object):
     def __init__(self, alpha):
         self.alpha = alpha
-    def __call__(self, N):
-        return sol.evalf(subs={aS: self.alpha, vS: N})        
+    def __call__(self, Ns):
+        return np.array(map(lambda N: sol.evalf(subs={aS: self.alpha, vS: N}),
+            Ns), dtype=np.float)
 evaler = EvalSol(alpha)
 
 radii = np.arange(0, 256*1024+1e-3, 1/32.0)
@@ -22,7 +23,9 @@ radii = np.arange(0, 256*1024+1e-3, 1/32.0)
 
 from multiprocessing import Pool
 pool = Pool()
-hyper = pool.map(evaler, radii)
+hyper = pool.map(evaler, np.array_split(radii, pool._processes))
+
+hyper = np.hstack(hyper)
 
 hyper.tofile('hyper.bin')
 radii.tofile('r.bin')
