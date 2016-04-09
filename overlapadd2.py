@@ -67,8 +67,11 @@ def overlapadd2(A, Hmat, L=None, Nfft=None, y=None, verbose=False, Na=None):
     if Na is None:
         Na = np.array(A.shape)
 
+    yIsFunction = False
     if y is None:
         y = np.zeros(M + Na - 1, dtype=A.dtype)
+    elif hasattr(y, '__call__'):
+        yIsFunction = True
     elif y.shape != tuple(M + Na - 1):
         raise ValueError('y given has incorrect dimensions', M + Na - 1)
 
@@ -106,17 +109,22 @@ def overlapadd2(A, Hmat, L=None, Nfft=None, y=None, verbose=False, Na=None):
             endd[YDIM] = min(start[YDIM] + L[YDIM], Na[YDIM])
             if verbose:
                 print("Input start", start, "Input end", endd, "FFT size", Nfft)
-            yt = myifft2(Hf * myfft2(Afun(start[YDIM], endd[YDIM], 
+            yt = myifft2(Hf * myfft2(Afun(start[YDIM], endd[YDIM],
                                           start[XDIM], endd[XDIM]), Nfft))
             if realOnly:
                 yt = yt.real
 
             thisend = np.minimum(Na + M - 1, start + Nfft)
-            y[start[YDIM] : thisend[YDIM], start[XDIM] : thisend[XDIM]] += (
-                yt[:(thisend[YDIM] - start[YDIM]),
-                    :(thisend[XDIM] - start[XDIM])])
+            if yIsFunction:
+                y(start[YDIM], thisend[YDIM], start[XDIM], thisend[XDIM],
+                        (yt[:(thisend[YDIM] - start[YDIM]), :(thisend[XDIM] - start[XDIM])]))
+            else:
+                y[start[YDIM] : thisend[YDIM], start[XDIM] : thisend[XDIM]] += (
+                    yt[:(thisend[YDIM] - start[YDIM]),
+                        :(thisend[XDIM] - start[XDIM])])
+
             start[YDIM] += L[YDIM]
-            
+
             del yt  # helps!
         start[XDIM] += L[XDIM]
     return y

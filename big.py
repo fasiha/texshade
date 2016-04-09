@@ -1,3 +1,4 @@
+import itertools as itools
 import overlapadd2 as ola
 import numpy as np
 
@@ -36,7 +37,7 @@ def makeHalfHankel(N, hbTaps=64):
         finalFilter = doubleFilter[:-1:2, :-1:2]
     else:
         finalFilter = doubleFilter[1:-1:2, 1:-1:2]
-    
+
     return finalFilter
 
 def memmapInput(binfilename, memmapMode='r', dtype=np.int16, shape=None):
@@ -48,46 +49,111 @@ def memmapInput(binfilename, memmapMode='r', dtype=np.int16, shape=None):
     inmap = np.memmap(binfilename, dtype=dtype, mode=memmapMode,
             shape=shape)
     return inmap
-    
+
 def memmapOutput(fname, shape):
     return np.memmap(fname, dtype=np.float32, mode='w+', shape=tuple(shape))
 
+def mkchunks(total, chunkSize):
+    numChunks = np.ceil(float(total) / chunkSize).astype(long)
+    idxToRange = lambda i: xrange(i * chunkSize, min((i + 1) * chunkSize, total))
+    return itools.imap(idxToRange, xrange(numChunks))
+
+def mkchunksN(totals, chunkSizes):
+    if len(chunkSizes) == 1:
+        chunkSizes *= len(totals)
+
+    iterators = itools.imap(mkchunks, totals, chunkSizes)
+    return itools.product(*iterators)
+
 def run(elevBinName, hankelTaps=960, L=(3500, 3500), verbose=True,
-        workingDir='./', nomatrix=True):
-    if nomatrix:
-        src = gdal.Open(elevBinName, gdalconst.GA_ReadOnly)
-        band = src.GetRasterBand(1)
-
-        bandNDV = band.GetNoDataValue()
-        cleaner = lambda arr: arr * (arr != bandNDV)
-
-        elevation = lambda start0,end0,start1,end1: cleaner(band.ReadAsArray(start1,
-                start0, end1-start1, end0-start0))
-        origSize = (src.RasterYSize, src.RasterXSize)
-    else:
-        elevation = memmapInput(elevBinName)
-        origSize = elevation.shape
-
+        workingDir='./'):
+    # Hankel filter
     hankelFilter = makeHalfHankel(hankelTaps)
     if verbose:
         print 'filter size:', hankelFilter.shape
-    outSize = np.array(origSize) + hankelFilter.shape - 1
+    filterSize = hankelFilter.shape
 
-    texture = memmapOutput(workingDir + 'tex.bin', outSize)
-    texture = ola.overlapadd2(elevation, hankelFilter, y=texture, L=L,
+    # Prep input data
+    inHandle = gdal.Open(elevBinName, gdalconst.GA_ReadOnly)
+    inBand = inHandle.GetRasterBand(1)
+
+    bandNDV = inBand.GetNoDataValue()
+    cleaner = lambda arr: arr * (arr != bandNDV)
+
+    makeNumpyIdxToGDALRead = (lambda band: lambda start0, end0, start1, end1:
+            band.ReadAsArray(start1, start0, end1-start1, end0-start0))
+    elevationIndexer = makeNumpyIdxToGDALRead(inBand)
+    elevation = lambda *args: cleaner(elevationIndexer(*args))
+    #elevation = lambda start0,end0,start1,end1: cleaner(inBand.ReadAsArray(start1, start0, end1-start1, end0-start0))
+    origSize = (inHandle.RasterYSize, inHandle.RasterXSize)
+
+    outSize = np.array(origSize) + filterSize - 1
+
+    # Prep output
+    outputName = workingDir + 'tex.bin'
+    outParams = tex.geoFileToStruct(elevBinName)
+    outParams['dtype'] = gdal.GetDataTypeByName('float32')
+    outParams['width'] = outSize[1]
+    outParams['height'] = outSize[0]
+    # For details about 'transform' list here, see:
+    #   http://www.gdal.org/classGDALDataset.html#af9593cc241e7d140f5f3c4798a43a668
+    affine = list(outParams['transform'])
+    affine[0] += affine[1] * -filterSize[1]/2
+    affine[3] += affine[5] * -filterSize[0]/2
+    outParams['transform'] = tuple(affine)
+    createHandle = tex.structToGeoFile(outputName, outParams, driverString='ENVI')
+    createHandle.FlushCache()
+    del createHandle  # otherwise, GDAL (and maybe memmap?) can't open file below
+
+
+    # Produce output
+    ndv = outParams['ndv']
+
+    texture = memmapOutput(outputName, outSize)
+
+    def textureAdder (start0,end0,start1,end1,arr):
+        inr0 = xrange(start0, end0)
+        inr1 = xrange(start1, end1)
+
+        outr0 = np.array(inr0) - filterSize[0] / 2
+        outr1 = np.array(inr1) - filterSize[1] / 2
+
+        good0 = np.logical_and(outr0 >= 0, outr0 < origSize[0])
+        good1 = np.logical_and(outr1 >= 0, outr1 < origSize[1])
+
+        el0_start = outr0[good0][0]
+        el0_end = outr0[good0][-1]+1
+        el1_start = outr1[good1][0]
+        el1_end = outr1[good1][-1]+1
+
+        ndvmask = np.ones(arr.shape, dtype=bool)
+        ndvmask[np.c_[np.where(good0)], good1] = (ndv !=
+                elevationIndexer(el0_start, el0_end, el1_start, el1_end))
+
+        texture[start0:end0, start1:end1] = (np.logical_not(ndvmask) * ndv +
+                ndvmask * (arr + texture[start0:end0, start1:end1]))
+
+    ola.overlapadd2(elevation, hankelFilter, y=textureAdder, L=L,
             verbose=True, Na=origSize)
+    texture.flush()
     if verbose:
         print("Done with filtering")
 
-    filterSize = hankelFilter.shape
-    subtexture = memmapOutput(workingDir + 'subtex.bin', origSize)
-    subtexture[:] = texture[filterSize[0]/2 : filterSize[0]/2+origSize[0], 
-                            filterSize[1]/2 : filterSize[1]/2+origSize[1] ][:]
-    subtexture.flush()
-    if verbose:
-        print("Done with extracting sub-texture")
 
-    return subtexture
+    # Clean up texture output: burn NDVs into FIR-induced border and whever
+    # original had NDV
+    outHandle = gdal.Open(outputName, gdalconst.GA_Update)
+    outBand = outHandle.GetRasterBand(1)
+    vertSlab = ndv * np.ones([outSize[0], filterSize[1]/2], dtype=float)
+    horizSlab = ndv * np.ones([filterSize[1]/2, outSize[1]], dtype=float)
+    outBand.WriteArray(horizSlab)
+    outBand.WriteArray(vertSlab)
+    # right
+    outBand.WriteArray(vertSlab[:,:-1], xoff=filterSize[1]/2 + origSize[1], yoff=0)
+    # bottom
+    outBand.WriteArray(horizSlab[:-1,:], xoff=0, yoff=filterSize[0]/2 + origSize[0])
+
+    return texture
 
 class RunningHist:
     def __init__(self, lo, hi, nbins=1000):
@@ -111,7 +177,7 @@ def bigMinmax(x, mask):
             hi = max(hi, row.max())
     return [lo, hi]
 
-def estimateLimits(subtexture, mask, percentiles, postPercentileScale, 
+def estimateLimits(subtexture, mask, percentiles, postPercentileScale,
                    skip=10, nbins=1000, small=False):
     if small:
         hist, binEdges = np.histogram(subtexture[mask][::skip],
@@ -123,10 +189,10 @@ def estimateLimits(subtexture, mask, percentiles, postPercentileScale,
             h(subtexture[i, mask[i].astype(np.bool)][::skip])
         hist, binEdges = h.pmf()
     distribution = np.cumsum(hist) * np.diff(binEdges[:2])
-    
+
     loIdx = np.sum(distribution < percentiles[0] / 100.0)
     hiIdx = np.sum(distribution < percentiles[1] / 100.0)
-    
+
     if loIdx == 0 or hiIdx == nbins or hiIdx == loIdx:
         print("Histogram with {} bins insufficient to estimate percentiles: lo={} and hi={}".format(nbins, loIdx, hiIdx))
 
@@ -134,7 +200,7 @@ def estimateLimits(subtexture, mask, percentiles, postPercentileScale,
     limits = rawLimits * postPercentileScale
     return tuple(limits)
 
-def postProcess(subtexture, maskName, limits=None, 
+def postProcess(subtexture, maskName, limits=None,
                 percentiles=[0.1, 99.9], postPercentileScale=[1.0, 1.0],
                 texTifName=None, verbose=True):
     # Find no-data mask from original file, which should be the water portions
@@ -142,7 +208,7 @@ def postProcess(subtexture, maskName, limits=None,
     landMask = memmapInput(maskName, memmapMode='r+', dtype=np.uint8)
     if verbose:
         print("Generated no-data mask")
-    
+
     if limits is None:
         # Get a soft-estimate of the color limits within `percentiles`
         # percentiles
@@ -166,7 +232,7 @@ def postProcess(subtexture, maskName, limits=None,
     driver = gdal.GetDriverByName('GTiff')
     NDV, xsize, ysize, GeoT, Projection, DataType = tex.GetGeoInfo(maskName)
 
-    tex.CreateGeoTiff(texTifName, landMask, driver, newNDV, xsize, ysize, 
+    tex.CreateGeoTiff(texTifName, landMask, driver, newNDV, xsize, ysize,
             GeoT, Projection, gdalconst.GDT_Byte)
     if verbose:
         print("Done saving.")
@@ -189,7 +255,7 @@ This converts the GeoTIF file to a flat binary file (the ENVI standard), and
 replaces the original NoDataValue of -32K with 0, so we don't have to do it
 here.
 
-Then call 
+Then call
 ```
 run("OUTPUT.bin", hankelTaps=1984, L=(7000, 7000))
 ```
@@ -209,10 +275,6 @@ if __name__ == '__main__':
         srtmtif = '/Users/ahmed.fasih/Downloads/gdal-demo-cgiar-srtm/SRTM-small.tif'
         intif = srtmtif
         t = run(intif, hankelTaps=288, L=(500, 500))
-
-        params = tex.geoFileToStruct(intif)
-        params['ndv'] = None
-        tex.structToGeoFile('subtex.tif', params, array=t, driverString='GTiff')
     elif False: # 250 meter data
         print("250 meter data, east or west")
         intif = datadir + 'east-land.tif'
@@ -227,14 +289,14 @@ if __name__ == '__main__':
         wdir = '/Volumes/SeagateBack/Fasih/90m/'
         inbin = datadir + 'land.bin'
         run(inbin, hankelTaps=12224, L=(2000, 10000), workingDir=wdir)
-    
+
     # postProcess(t, intif)
 
 def makeTileCommand(filename):
     ll = tex.filenameToLatsLons(filename)
     NDV, xsize, ysize, GeoT, Projection, DataType = tex.GetGeoInfo(filename)
     return "gdal_translate -of VRT -a_srs EPSG:4326 -gcp 0 0 {} {} -gcp {} 0 {} {} -gcp {} {} {} {} {} ne.vrt && gdalwarp -of VRT -t_srs EPSG:4326 ne.vrt ne2.vrt && python gdal2tiles_parallel.py -p mercator -a 0,0,0 --config GDAL_CACHEMAX 1024 ne2.vrt".format(ll['lonExt'][0], ll['latExt'][1], xsize, ll['lonExt'][1], ll['latExt'][1], xsize, ysize, ll['lonExt'][1], ll['latExt'][0], filename)
-    
+
 
 """
 To remove lakes *in-place*:
