@@ -2,9 +2,6 @@ from __future__ import division
 import numpy as np
 import sympy
 
-preradii = np.fromfile('orig_r.bin', np.float64)
-prehyper = np.fromfile('orig_hyper.bin', np.float64)
-
 fmax = 0.5
 aS, vS, rS = sympy.symbols('a v r')
 sol = sympy.integrate(rS ** aS * rS * sympy.besselj(0, 2 * sympy.pi * vS * rS),
