@@ -86,12 +86,15 @@ def run(elevBinName, hankelTaps=960, L=(3500, 3500), verbose=True,
     origSize = (inHandle.RasterYSize, inHandle.RasterXSize)
     outSize = np.array(origSize) + filterSize - 1
 
+    del inHandle
+    del inBand # helps?
+
     cleaner = lambda arr: arr * np.logical_not(np.isclose(arr, bandNDV))
     getElevation = lambda *args: geoFileToChunk(elevBinName, *args)
     getCleanElevation = lambda *args: cleaner(getElevation(*args))
 
     # Prep output
-    outputName = workingDir + 'tex-2.bin'
+    outputName = workingDir + 'tex-3.bin'
     outParams = tex.geoFileToStruct(elevBinName)
     outParams['dtype'] = gdal.GetDataTypeByName('float32')
     outParams['width'] = outSize[1]
