@@ -94,7 +94,7 @@ def run(elevBinName, hankelTaps=960, L=(3500, 3500), verbose=True,
     getCleanElevation = lambda *args: cleaner(getElevation(*args))
 
     # Prep output
-    outputName = workingDir + 'tex-4-noclean.bin'
+    outputName = workingDir + 'tex-5-clean-pyfftw.bin'
     outParams = tex.geoFileToStruct(elevBinName)
     outParams['dtype'] = gdal.GetDataTypeByName('float32')
     outParams['width'] = outSize[1]
@@ -139,7 +139,7 @@ def run(elevBinName, hankelTaps=960, L=(3500, 3500), verbose=True,
     def textureAdder(start0,end0,start1,end1,arr):
         texture[start0:end0, start1:end1] += arr
 
-    ola.overlapadd2(getCleanElevation, hankelFilter, y=textureAdder, L=L,
+    ola.overlapadd2(getCleanElevation, hankelFilter, y=textureAdderClean, L=L,
             verbose=True, Na=origSize)
     texture.flush()
     if verbose:
@@ -281,11 +281,12 @@ if __name__ == '__main__':
 
     datadir = '/Users/ahmed.fasih/Downloads/gdal-demo-cgiar-srtm/'
 
-    if setup == 'test':  # Testing
+    if setup == 'test' or setup=='ned-small':  # Testing
         nedtif = '/Users/ahmed.fasih/Documents/Personal/texshading/ned-small.tif'
+        t = run(nedtif, hankelTaps=288, L=(500, 500))
+    elif setup == 'srtm-small':
         srtmtif = '/Users/ahmed.fasih/Downloads/gdal-demo-cgiar-srtm/SRTM-small.tif'
-        intif = nedtif or srtmtif
-        t = run(intif, hankelTaps=288, L=(500, 500))
+        t = run(srtmtif, hankelTaps=288, L=(500, 500))
     elif setup == 'cgiar-250': # 250 meter data
         print("250 meter data, east or west")
         intif = datadir + 'east-land.tif'

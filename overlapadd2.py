@@ -1,5 +1,10 @@
+from multiprocessing import cpu_count
+NCPUS = cpu_count()
+
 import numpy as np
 from numpy.fft import fft2, ifft2, rfft2, irfft2
+import pyfftw
+pyfftw.interfaces.cache.enable()
 
 
 def overlapadd2(A, Hmat, L=None, Nfft=None, y=None, verbose=False, Na=None):
@@ -93,11 +98,16 @@ def overlapadd2(A, Hmat, L=None, Nfft=None, y=None, verbose=False, Na=None):
 
     realOnly = np.isrealobj(Afun(0, 1, 0, 1)) and np.isrealobj(Hmat)
     if realOnly:
-        myifft2, myfft2 = (irfft2, rfft2)
+        xAligned = pyfftw.zeros_aligned(tuple(Nfft), dtype='float32')
+        (myifft2, myfft2) = (pyfftw.interfaces.numpy_fft.irfft2, 
+                pyfftw.interfaces.numpy_fft.rfft2)
     else:
-        myifft2, myfft2 = (ifft2, fft2)
+        assert(False)
 
-    Hf = myfft2(Hmat, Nfft)
+    HmatAligned = pyfftw.empty_aligned(tuple(Nfft), dtype='float32')
+    HmatAligned[:Hmat.shape[0], :Hmat.shape[1]] = Hmat
+    Hf = pyfftw.interfaces.numpy_fft.rfft2(Hmat, Nfft)
+    del HmatAligned
 
     (XDIM, YDIM) = (1, 0)
     start = [0, 0]
@@ -109,10 +119,11 @@ def overlapadd2(A, Hmat, L=None, Nfft=None, y=None, verbose=False, Na=None):
             endd[YDIM] = min(start[YDIM] + L[YDIM], Na[YDIM])
             if verbose:
                 print("Input start", start, "Input end", endd, "FFT size", Nfft)
-            yt = myifft2(Hf * myfft2(Afun(start[YDIM], endd[YDIM],
-                                          start[XDIM], endd[XDIM]), Nfft))
-            if realOnly:
-                yt = yt.real
+            
+            diffs = [endd[YDIM] - start[YDIM], endd[XDIM] - start[XDIM]]
+            xAligned[:] = 0
+            xAligned[:diffs[0], :diffs[1]] = Afun(start[YDIM], endd[YDIM], start[XDIM], endd[XDIM])
+            yt = myifft2(Hf * myfft2(xAligned, threads=NCPUS/2), threads=NCPUS/2)
 
             thisend = np.minimum(Na + M - 1, start + Nfft)
             if yIsFunction:
