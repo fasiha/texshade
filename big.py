@@ -132,7 +132,7 @@ def run(elevBinName, hankelTaps=960, L=(3500, 3500), verbose=True,
 
         ndvmask = np.ones(arr.shape, dtype=bool)
         ndvmask[np.c_[np.where(good0)], good1] = np.logical_not(np.isclose(
-            ndv, getElevation(el0_start, el0_end, el1_start, el1_end)))
+            getElevation(el0_start, el0_end, el1_start, el1_end), ndv))
 
         texture[start0:end0, start1:end1] = (np.logical_not(ndvmask) * ndv +
                 ndvmask * (arr + texture[start0:end0, start1:end1]))
