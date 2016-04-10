@@ -299,7 +299,7 @@ if __name__ == '__main__':
         run(inbin, hankelTaps=12224, L=(2000, 10000), workingDir=wdir)
     elif setup == 'ned': # 10m NED data!
         t = run('/srv/data/fasih/NED/vrt/ned.vrt', hankelTaps=12224, L=(10000,
-            25000), workingDir='/srv/data/fasih/NED/vrt/')
+            58000), workingDir='/srv/data/fasih/NED/vrt/')
 
     # postProcess(t, intif)
 
