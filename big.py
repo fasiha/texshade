@@ -65,6 +65,11 @@ def mkchunksN(totals, chunkSizes):
     iterators = itools.imap(mkchunks, totals, chunkSizes)
     return itools.product(*iterators)
 
+def geoFileToChunk(fname, start0, end0, start1, end1,bandnum=1):
+    src = gdal.Open(fname, gdalconst.GA_ReadOnly)
+    band = src.GetRasterBand(bandnum)
+    return band.ReadAsArray(start1, start0, end1-start1, end0-start0)
+
 def run(elevBinName, hankelTaps=960, L=(3500, 3500), verbose=True,
         workingDir='./'):
     # Hankel filter
@@ -76,21 +81,17 @@ def run(elevBinName, hankelTaps=960, L=(3500, 3500), verbose=True,
     # Prep input data
     inHandle = gdal.Open(elevBinName, gdalconst.GA_ReadOnly)
     inBand = inHandle.GetRasterBand(1)
-
     bandNDV = inBand.GetNoDataValue()
-    cleaner = lambda arr: arr * np.logical_not(np.isclose(arr, bandNDV))
 
-    makeNumpyIdxToGDALRead = (lambda band: lambda start0, end0, start1, end1:
-            band.ReadAsArray(start1, start0, end1-start1, end0-start0))
-    elevationIndexer = makeNumpyIdxToGDALRead(inBand)
-    elevation = lambda *args: cleaner(elevationIndexer(*args))
-    #elevation = lambda start0,end0,start1,end1: cleaner(inBand.ReadAsArray(start1, start0, end1-start1, end0-start0))
     origSize = (inHandle.RasterYSize, inHandle.RasterXSize)
-
     outSize = np.array(origSize) + filterSize - 1
 
+    cleaner = lambda arr: arr * np.logical_not(np.isclose(arr, bandNDV))
+    getElevation = lambda *args: geoFileToChunk(elevBinName, *args)
+    getCleanElevation = lambda *args: cleaner(getElevation(*args))
+
     # Prep output
-    outputName = workingDir + 'tex.bin'
+    outputName = workingDir + 'tex-2.bin'
     outParams = tex.geoFileToStruct(elevBinName)
     outParams['dtype'] = gdal.GetDataTypeByName('float32')
     outParams['width'] = outSize[1]
@@ -111,7 +112,7 @@ def run(elevBinName, hankelTaps=960, L=(3500, 3500), verbose=True,
 
     texture = memmapOutput(outputName, outSize)
 
-    def textureAdder (start0,end0,start1,end1,arr):
+    def textureAdderClean(start0,end0,start1,end1,arr):
         inr0 = xrange(start0, end0)
         inr1 = xrange(start1, end1)
 
@@ -128,12 +129,14 @@ def run(elevBinName, hankelTaps=960, L=(3500, 3500), verbose=True,
 
         ndvmask = np.ones(arr.shape, dtype=bool)
         ndvmask[np.c_[np.where(good0)], good1] = np.logical_not(np.isclose(
-            ndv, elevationIndexer(el0_start, el0_end, el1_start, el1_end)))
+            ndv, getElevation(el0_start, el0_end, el1_start, el1_end)))
 
         texture[start0:end0, start1:end1] = (np.logical_not(ndvmask) * ndv +
                 ndvmask * (arr + texture[start0:end0, start1:end1]))
+    def textureAdder(start0,end0,start1,end1,arr):
+        texture[start0:end0, start1:end1] += arr
 
-    ola.overlapadd2(elevation, hankelFilter, y=textureAdder, L=L,
+    ola.overlapadd2(getCleanElevation, hankelFilter, y=textureAdderClean, L=L,
             verbose=True, Na=origSize)
     texture.flush()
     if verbose:

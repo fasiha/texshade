@@ -6,6 +6,8 @@ Uncompress them all.
 Make one big VRT.
 
 ## Texture generation
+(Make the Hankel look-up table. Took 44 minutes for 0:1/32.0:128K and 32 cores.)
+
 Run through texture generator & save the texture as a new binary file of float32.
 
 ## Post-processing
