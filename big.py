@@ -319,27 +319,7 @@ To remove lakes *in-place*:
 $ gdal_rasterize -sql "SELECT * FROM ne_10m_lakes WHERE scalerank=0" -burn 0  Data/ne_10m_lakes/ne_10m_lakes.shp INPUT.tif
 """
 
-def sph2cart(az, el, r=6371e3):
-    x = r * np.cos(el) * np.cos(az)
-    y = r * np.cos(el) * np.sin(az)
-    z = r * np.sin(el)
-    return (x, y, z)
-
-def sphd2cart(az, el, r=6371e3):
-    return sph2cart(np.deg2rad(az), np.deg2rad(el), r)
-
 """
-import numpy as np
-import gdal, gdalconst
-import textureShading as tex
-import big
-
-mask = big.memmapInput('land-mask.bin',dtype=np.uint8)
-text = big.memmapInput('/Volumes/SeagateBack/Fasih/90m/subtex.bin', shape=mask.shape, dtype=np.single)
-big.postProcess(text, 'land-mask.bin')
-
-
-mask = big.memmapInput('land-mask-0.1.bin',dtype=np.uint8)
-text = big.memmapInput('subtex.bin',shape=mask.shape,dtype=np.single)
-big.postProcess(text, 'land-mask-0.1.bin', texTifName='small-runninghist.tif')
+NED 10m data:
+$ mkdir ../tiles-6144x6144 && gdal2tiles_parallel.py --processes 14 -p mercator -a 0,0,0  --config GDAL_CACHEMAX 2048 tex-2.bin ../tiles-6144x6144
 """
