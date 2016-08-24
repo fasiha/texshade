@@ -65,10 +65,11 @@ def mkchunksN(totals, chunkSizes):
     iterators = itools.imap(mkchunks, totals, chunkSizes)
     return itools.product(*iterators)
 
-def geoFileToChunk(fname, start0, end0, start1, end1,bandnum=1):
+def geoFileToChunk(fname, start0, end0, start1, end1,bandnum=1, dtype=np.float32):
     src = gdal.Open(fname, gdalconst.GA_ReadOnly)
     band = src.GetRasterBand(bandnum)
-    return band.ReadAsArray(start1, start0, end1-start1, end0-start0)
+    ret = band.ReadAsArray(start1, start0, end1-start1, end0-start0).astype(dtype)
+    return ret
 
 def run(elevBinName, hankelTaps=960, L=(3500, 3500), verbose=True,
         workingDir='./'):
@@ -89,9 +90,13 @@ def run(elevBinName, hankelTaps=960, L=(3500, 3500), verbose=True,
     del inHandle
     del inBand # helps?
 
-    cleaner = lambda arr: arr * np.logical_not(np.isclose(arr, bandNDV))
-    getElevation = lambda *args: geoFileToChunk(elevBinName, *args)
-    getCleanElevation = lambda *args: cleaner(getElevation(*args))
+    if bandNDV is not None:
+        bandNDV = float(bandNDV)
+        cleaner = lambda arr: arr * np.logical_not(np.isclose(arr, bandNDV))
+        getElevation = lambda *args: geoFileToChunk(elevBinName, *args)
+        getCleanElevation = lambda *args: cleaner(getElevation(*args))
+    else:
+        getCleanElevation = lambda *args: geoFileToChunk(elevBinName, *args)
 
     # Prep output
     outputName = workingDir + 'tex-5-clean-pyfftw.bin'
@@ -304,6 +309,11 @@ if __name__ == '__main__':
     elif setup == 'ned': # 10m NED data!
         t = run('/srv/data/fasih/NED/vrt/ned.vrt', hankelTaps=12224, L=(10000,
             58000), workingDir='/srv/data/fasih/NED/vrt/')
+
+    elif setup == 'aster': # >30m ASter
+        print "You chose ASTER!"
+        t = run('/srv/data/fasih/ASTER/vrt/aster.vrt', hankelTaps=12224, L=(10000,
+            58000), workingDir='/srv/data/fasih/ASTER/vrt/')
 
     # postProcess(t, intif)
 
