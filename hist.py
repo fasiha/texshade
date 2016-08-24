@@ -50,7 +50,7 @@ def hist(fname, nbuckets=1000, percentiles=[1.0, 99.0]):
     print "%f,%f" % (p, v)
 
   # Print out gdal_translate command (what we came here for anyway)
-  print "gdal_translate -ot Byte -of PNG -a_nodata 0 -scale {min} {max} 0 255 {fname} clipped-{fname}.png".format(min=vals[1], max=vals[-2], fname=fname)
+  print "gdal_translate -ot Byte -of PNG -a_nodata {min} -scale {min} {max} 0 255 {fname} clipped-{fname}.png".format(min=vals[1], max=vals[-2], fname=fname)
 
 
   return (vals, percentiles)
