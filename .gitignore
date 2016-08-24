@@ -16,3 +16,5 @@ output/
 *.bin
 *.vrt
 *.hdr
+*.swp
+*.swo
