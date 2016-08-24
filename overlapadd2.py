@@ -6,6 +6,8 @@ from numpy.fft import fft2, ifft2, rfft2, irfft2
 import pyfftw
 pyfftw.interfaces.cache.enable()
 
+import time
+
 
 def overlapadd2(A, Hmat, L=None, Nfft=None, y=None, verbose=False, Na=None):
     """
@@ -109,6 +111,8 @@ def overlapadd2(A, Hmat, L=None, Nfft=None, y=None, verbose=False, Na=None):
     Hf = pyfftw.interfaces.numpy_fft.rfft2(Hmat, Nfft)
     del HmatAligned
 
+    if verbose:
+        tic = time.time()
     (XDIM, YDIM) = (1, 0)
     start = [0, 0]
     endd = [0, 0]
@@ -118,7 +122,9 @@ def overlapadd2(A, Hmat, L=None, Nfft=None, y=None, verbose=False, Na=None):
         while start[YDIM] <= Na[YDIM]:
             endd[YDIM] = min(start[YDIM] + L[YDIM], Na[YDIM])
             if verbose:
-                print("Input start", start, "Input end", endd, "FFT size", Nfft)
+                print("Input start", start, "Input end", endd, "FFT size",
+                    Nfft, "elapsed", time.time() - tic)
+                tic = time.time()
             
             diffs = [endd[YDIM] - start[YDIM], endd[XDIM] - start[XDIM]]
             xAligned[:] = 0

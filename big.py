@@ -97,6 +97,7 @@ def run(elevBinName, hankelTaps=960, L=(3500, 3500), verbose=True,
         getCleanElevation = lambda *args: cleaner(getElevation(*args))
     else:
         getCleanElevation = lambda *args: geoFileToChunk(elevBinName, *args)
+        getElevation = lambda *args: geoFileToChunk(elevBinName, *args)
 
     # Prep output
     outputName = workingDir + 'tex-5-clean-pyfftw.bin'
@@ -144,7 +145,7 @@ def run(elevBinName, hankelTaps=960, L=(3500, 3500), verbose=True,
     def textureAdder(start0,end0,start1,end1,arr):
         texture[start0:end0, start1:end1] += arr
 
-    ola.overlapadd2(getCleanElevation, hankelFilter, y=textureAdderClean, L=L,
+    ola.overlapadd2(getCleanElevation, hankelFilter, y=textureAdder, L=L,
             verbose=True, Na=origSize)
     texture.flush()
     if verbose:
